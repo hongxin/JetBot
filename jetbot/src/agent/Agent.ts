@@ -76,6 +76,12 @@ export class Agent {
     // Scheduler methods internally await ready, so no race condition even if init is still in progress
     this.scheduler.init().then(() => this.scheduler.start()).catch(err => log.error('scheduler init failed', { error: err.message }));
 
+    // Load soul file (jetbot.md) from VirtualFS — async, non-blocking
+    // Falls back to compiled-in default if VirtualFS isn't ready yet
+    this.promptBuilder.loadSoulFile(this.tools.fs).catch(err =>
+      log.error('soul file load failed', { error: err.message })
+    );
+
     // Inject rich environment profile instead of minimal "Browser" string
     this.promptBuilder.setEnvironmentFromProfile(this.runtime);
     this.promptBuilder.setToolDescriptions(

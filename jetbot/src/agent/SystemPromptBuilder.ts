@@ -1,5 +1,13 @@
 import type { RuntimeProfile } from '../env/types';
 import { profileToPrompt } from '../env/RuntimeDetector';
+import type { VirtualFS } from '../tools/VirtualFS';
+import defaultSoulMd from './jetbot.md?raw';
+import { logger } from '../lib/logger';
+
+const log = logger.module('prompt');
+
+/** Path of the soul file in VirtualFS — user-editable at runtime */
+export const SOUL_FILE_PATH = '/jetbot.md';
 
 interface Section {
   key: string;
@@ -11,12 +19,41 @@ export class SystemPromptBuilder {
   private sections: Map<string, Section> = new Map();
 
   constructor() {
+    // Minimal fallback identity — will be replaced by loadSoulFile()
     this.setSection('identity', 10,
-      'You are JetBot, a browser-based AI coding assistant. You run entirely inside the user\'s browser tab. ' +
-      'You help users with programming tasks using a virtual filesystem, browser-native JavaScript execution, ' +
-      'HTML rendering, web requests, and more. You should actively leverage browser capabilities like js_eval for computation ' +
-      'and render_html for visual output.'
+      'You are JetBot, a browser-based AI coding assistant running entirely inside the user\'s browser tab.'
     );
+  }
+
+  /**
+   * Load the soul file (jetbot.md) with hybrid strategy:
+   *   1. Try VirtualFS (user may have edited it)
+   *   2. If not found, seed the default into VirtualFS and use it
+   *
+   * This makes jetbot.md user-editable via the agent's own edit_file tool,
+   * while always having a sensible out-of-the-box default.
+   */
+  async loadSoulFile(fs: VirtualFS): Promise<void> {
+    try {
+      await fs.init();
+      let content: string;
+
+      if (await fs.exists(SOUL_FILE_PATH)) {
+        content = await fs.readFile(SOUL_FILE_PATH);
+        log.debug('soul file loaded from VirtualFS');
+      } else {
+        // First run — seed default into VirtualFS
+        await fs.writeFile(SOUL_FILE_PATH, defaultSoulMd);
+        content = defaultSoulMd;
+        log.info('soul file seeded into VirtualFS', { path: SOUL_FILE_PATH, size: content.length });
+      }
+
+      this.setSection('identity', 10, content);
+    } catch (err: any) {
+      // Fallback to compiled-in default if VirtualFS fails
+      log.warn('soul file load failed, using built-in default', { error: err.message });
+      this.setSection('identity', 10, defaultSoulMd);
+    }
   }
 
   setSection(key: string, priority: number, content: string): void {
