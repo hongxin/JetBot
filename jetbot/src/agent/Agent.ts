@@ -46,6 +46,7 @@ export class Agent {
   private autoMode = false;
   private runtime: RuntimeProfile;
   private onInjectCallback: InjectionCallback | null = null;
+  private soulReady: Promise<void>;
 
   constructor(config: AgentConfig) {
     this.llm = config.llm;
@@ -76,9 +77,8 @@ export class Agent {
     // Scheduler methods internally await ready, so no race condition even if init is still in progress
     this.scheduler.init().then(() => this.scheduler.start()).catch(err => log.error('scheduler init failed', { error: err.message }));
 
-    // Load soul file (jetbot.md) from VirtualFS — async, non-blocking
-    // Falls back to compiled-in default if VirtualFS isn't ready yet
-    this.promptBuilder.loadSoulFile(this.tools.fs).catch(err =>
+    // Load soul file (jetbot.md) from VirtualFS — awaited in handle() before first LLM call
+    this.soulReady = this.promptBuilder.loadSoulFile(this.tools.fs).catch(err =>
       log.error('soul file load failed', { error: err.message })
     );
 
@@ -106,6 +106,10 @@ export class Agent {
 
     log.info('handle start', { inputLength: input.length });
     this.running = true;
+
+    // Ensure soul file is loaded before first LLM call
+    await this.soulReady;
+
     this.context.addUserMessage(input);
 
     // Build system prompt with plan mode and active skill
