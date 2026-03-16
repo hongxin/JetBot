@@ -156,6 +156,7 @@ npm run build
 | `/plan <goal>` | 进入/退出计划模式 |
 | `/next` | 推进计划阶段 |
 | `/skill <name>\|list\|off` | 激活/列出/关闭技能 |
+| `/export <path>` | 从 VirtualFS 下载文件到本地 |
 | `/schedule list\|add\|remove\|pause\|resume` | 管理定时任务 |
 | `/auto on\|off` | 切换自主模式 |
 
@@ -181,6 +182,7 @@ src/
 │   ├── TaskPanel.tsx      # 定时任务面板
 │   ├── RenderPreview.tsx  # HTML 预览面板
 │   ├── LogPanel.tsx       # 系统日志面板
+│   ├── FileBridge.tsx     # 文件桥接（导入/导出/拖拽）
 │   └── shared/            # Modal, Spinner 共享组件
 │
 ├── tools/                 # 工具系统
@@ -245,6 +247,9 @@ src/
 | `bf9c883` | `/auto on` 权限策略联动，减少交互疲劳 |
 | `0c3358b` | 工具参数校验 + AgenticLoop 重复失败检测 |
 | `381a87b` | 修复 /auto 模式权限同步（根因：permission level 未注入）|
+| `f932ea5` | jetbot.md 灵魂文件（混合加载：编译默认 + VirtualFS 可编辑）|
+| `8cce74b` | File Bridge：VirtualFS ↔ 真实文件系统双向传输（拖拽导入 + 下载导出）|
+| `bc7e340` | `/export` 命令：快速下载 VirtualFS 文件 |
 
 ## Design Philosophy
 
