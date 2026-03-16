@@ -89,6 +89,7 @@ const translations = {
   'cmd.help_footer': { en: 'Just type naturally to chat with the AI assistant.', zh: '直接输入自然语言与 AI 助手对话。' },
   'cmd.help_runtime': { en: '`/runtime` — Show detected runtime environment and capabilities', zh: '`/runtime` — 显示检测到的运行时环境和能力' },
   'cmd.help_schedule': { en: '`/schedule list|add|remove|pause|resume` — Manage scheduled tasks', zh: '`/schedule list|add|remove|pause|resume` — 管理定时任务' },
+  'cmd.help_export': { en: '`/export <path>` — Download a VirtualFS file to local filesystem', zh: '`/export <路径>` — 从虚拟文件系统下载文件到本地' },
   'cmd.help_auto': { en: '`/auto on|off` — Toggle autonomous mode (heartbeat)', zh: '`/auto on|off` — 切换自主模式（心跳）' },
 
   // Schedule

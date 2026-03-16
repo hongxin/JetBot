@@ -230,6 +230,8 @@ export class Agent {
         return this.handleScheduleCommand(args);
       case '/skill':
         return this.handleSkillCommand(args);
+      case '/export':
+        return this.handleExportCommand(args);
       case '/auto':
         return this.handleAutoCommand(args);
       default:
@@ -308,6 +310,25 @@ export class Agent {
       return { response: `${t('skill.notFound')}: ${sub}. ${t('skill.usage')}` };
     }
     return { response: `${t('skill.activated')}: **${sub}**` };
+  }
+
+  private async handleExportCommand(args: string[]): Promise<{ response: string }> {
+    const path = args[0];
+    if (!path) {
+      return { response: 'Usage: /export <path>  — Download a VirtualFS file to your local filesystem.' };
+    }
+    const fs = this.tools.fs;
+    try {
+      const content = await fs.readFile(path);
+      const filename = path.split('/').pop() || 'download.txt';
+      const event = new CustomEvent('jetbot:export', {
+        detail: { content, filename, path },
+      });
+      document.dispatchEvent(event);
+      return { response: `Exported **${path}** (${content.length} bytes) → downloading as \`${filename}\`` };
+    } catch {
+      return { response: `File not found: ${path}` };
+    }
   }
 
   private handleAutoCommand(args: string[]): { response: string } {
@@ -446,6 +467,7 @@ export class Agent {
       `- ${t('cmd.help_runtime')}`,
       `- ${t('cmd.help_schedule')}`,
       `- ${t('cmd.help_skill')}`,
+      `- ${t('cmd.help_export')}`,
       `- ${t('cmd.help_auto')}`,
       '',
       t('cmd.help_footer'),
