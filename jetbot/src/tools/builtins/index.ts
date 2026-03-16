@@ -8,6 +8,7 @@ import { createHttpGet } from './httpGet';
 import { createShellExecute } from './shellExecute';
 import { createJsEval } from './jsEval';
 import { createRenderHtml } from './renderHtml';
+import { createExportFile } from './exportFile';
 
 export function registerBuiltins(registry: ToolRegistry): void {
   const fs = registry.fs;
@@ -26,4 +27,5 @@ export function registerBuiltins(registry: ToolRegistry): void {
   // Browser-native tools (loaded only if capabilities are present)
   registry.register(createJsEval());
   registry.register(createRenderHtml());
+  registry.register(createExportFile(fs));
 }

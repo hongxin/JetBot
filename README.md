@@ -35,7 +35,7 @@ JetBot 是一个完全运行在浏览器中的 AI 编程助手。无需后端服
 - 重复错误检测：相同工具+相同错误自动警告 LLM 换方案
 - 流式输出：实时显示 LLM 思考过程
 
-### 9 Built-in Tools
+### 10 Built-in Tools
 
 | Tool | Permission | Description |
 |------|-----------|-------------|
@@ -48,8 +48,11 @@ JetBot 是一个完全运行在浏览器中的 AI 编程助手。无需后端服
 | `js_eval` | risky | 沙箱执行 JavaScript（10s 超时）|
 | `render_html` | risky | HTML/CSS 渲染到预览面板 |
 | `shell_execute` | dangerous | 沙箱 shell 命令（ls, grep, cat 等）|
+| `export_file` | safe | 从 VirtualFS 导出文件到本地（浏览器下载）|
 
 所有工具均有参数校验，缺失必填参数时返回明确错误而非崩溃。
+
+**文件桥接（File Bridge）：** 支持真实文件系统与 VirtualFS 双向传输——拖拽文件到聊天区域即可导入，agent 可调用 `export_file` 触发浏览器下载导出。
 
 ### 18 Built-in Skills
 
@@ -184,7 +187,7 @@ src/
 │   ├── ToolRegistry.ts    # 工具注册 + 能力过滤
 │   ├── Permission.ts      # 三级权限管理
 │   ├── VirtualFS.ts       # IndexedDB 虚拟文件系统
-│   └── builtins/          # 9 个内置工具
+│   └── builtins/          # 10 个内置工具
 │
 ├── skills/                # 技能系统
 │   ├── SkillRegistry.ts   # 技能注册 + 激活管理

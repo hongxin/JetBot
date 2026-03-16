@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, type KeyboardEvent } from 'react';
 import { useAgentStore } from '../store/agentStore';
 import { useChatStore } from '../store/chatStore';
 import { useT } from '../lib/i18n';
+import { ImportButton } from './FileBridge';
 
 export function InputBar() {
   const [text, setText] = useState('');
@@ -37,6 +38,7 @@ export function InputBar() {
   return (
     <div className="sticky bottom-0 bg-[hsl(var(--background))] border-t border-[hsl(var(--border))] p-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
       <div className="max-w-3xl mx-auto flex gap-2 items-end">
+        <ImportButton />
         <textarea
           ref={textareaRef}
           value={text}
