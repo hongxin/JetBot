@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, type KeyboardEvent } from 'react';
 import { useAgentStore } from '../store/agentStore';
 import { useChatStore } from '../store/chatStore';
+import { useCosmosStore } from '../store/cosmosStore';
 import { useT } from '../lib/i18n';
 import { ImportButton } from './FileBridge';
 
@@ -11,6 +12,9 @@ export function InputBar() {
   const abort = useAgentStore(s => s.abort);
   const status = useChatStore(s => s.status);
   const t = useT();
+  const breakNext = useCosmosStore(s => s.breakNext);
+  const activeView = useCosmosStore(s => s.activeView);
+  const setBreakNext = useCosmosStore(s => s.setBreakNext);
   const isRunning = status !== 'idle' && status !== 'error';
 
   const handleSend = useCallback(() => {
@@ -39,6 +43,19 @@ export function InputBar() {
     <div className="sticky bottom-0 bg-[hsl(var(--background))] border-t border-[hsl(var(--border))] p-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
       <div className="max-w-3xl mx-auto flex gap-2 items-end">
         <ImportButton />
+        {activeView === 'cosmos' && (
+          <button
+            onClick={() => setBreakNext(!breakNext)}
+            title={t(breakNext ? 'cosmos.breakActive' : 'cosmos.breakHint')}
+            className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs transition-all ${
+              breakNext
+                ? 'bg-red-500/20 text-red-400 ring-1 ring-red-500/40'
+                : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+            }`}
+          >
+            {breakNext ? '✂' : '⛓'}
+          </button>
+        )}
         <textarea
           ref={textareaRef}
           value={text}

@@ -131,6 +131,13 @@ const translations = {
   'log.entries': { en: 'entries', zh: '条' },
   'log.modules': { en: 'modules', zh: '个模块' },
   'status.logs': { en: 'Logs', zh: '日志' },
+
+  // Cosmos
+  'cosmos.toggle': { en: 'Cosmos', zh: '宇宙' },
+  'cosmos.empty': { en: 'Send a message — your conversation will bloom as cosmic bubbles', zh: '发送消息，对话将化为星辰泡泡绽放于此' },
+  'cosmos.connecting': { en: 'Connecting...', zh: '连接中...' },
+  'cosmos.breakHint': { en: 'Break chain — next message starts a new topic', zh: '断链 — 下一条消息开启新话题' },
+  'cosmos.breakActive': { en: 'Chain broken — resets after sending', zh: '已断链 — 发送后自动恢复' },
 } as const;
 
 export type TranslationKey = keyof typeof translations;

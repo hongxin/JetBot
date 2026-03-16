@@ -6,12 +6,17 @@ import { useChatStore, type MessageSource, type PermissionResponse } from './cha
 import type { AgentEvent } from '../types/message';
 import type { Scheduler } from '../scheduler/Scheduler';
 import { logger } from '../lib/logger';
+import { useCosmosStore } from './cosmosStore';
 
 const log = logger.module('store');
 
 // Module-level state for event routing (shared between initAgent and handleInjection)
 let currentMsgId = '';
 let currentSource: MessageSource = undefined;
+// Track current cosmos turn for linking user→assistant→tools
+let currentCosmosTurnId = 0;
+// Track assistant node id so we can update its content when finalized
+let currentAssistantCosmosId = '';
 
 interface AgentState {
   agent: Agent | null;
@@ -56,17 +61,41 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       },
       onEvent: (event: AgentEvent) => {
         const store = useChatStore.getState();
+        const cosmos = useCosmosStore.getState();
+
         switch (event.type) {
-          case 'llm:request':
+          case 'llm:request': {
             currentMsgId = store.addAssistantMessage(currentSource);
             store.setStatus('thinking');
             store.setIteration(event.data.iteration as number);
+            // Create assistant cosmos node (content will be updated when finalized)
+            currentAssistantCosmosId = `assistant-${currentMsgId}`;
+            cosmos.addNode({
+              id: currentAssistantCosmosId,
+              kind: 'assistant',
+              content: '',
+              toolName: '',
+              params: {},
+              isError: false,
+              status: 'running',
+              turnId: currentCosmosTurnId,
+              timestamp: Date.now(),
+            });
             break;
+          }
           case 'llm:chunk':
             store.appendToAssistant(currentMsgId, event.data.chunk as string);
             break;
           case 'llm:response': {
             store.finalizeAssistant(currentMsgId);
+            // Update assistant cosmos node with final content
+            const msg = store.messages.find(m => m.id === currentMsgId);
+            if (msg) {
+              cosmos.updateNode(currentAssistantCosmosId, {
+                content: msg.content,
+                status: 'done',
+              });
+            }
             const toolCalls = event.data.toolCalls as Array<{ id: string; name: string; arguments: string }>;
             if (toolCalls?.length) {
               for (const tc of toolCalls) {
@@ -77,17 +106,41 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             }
             break;
           }
-          case 'tool:start':
+          case 'tool:start': {
             store.setStatus('executing_tool');
+            // Forward to cosmos store
+            const toolCalls = store.messages.find(m => m.id === currentMsgId)?.toolCalls;
+            const tc = toolCalls?.[toolCalls.length - 1];
+            if (tc) {
+              cosmos.addNode({
+                id: tc.id,
+                kind: 'tool',
+                content: '',
+                toolName: tc.name,
+                params: tc.params,
+                isError: false,
+                status: 'running',
+                turnId: currentCosmosTurnId,
+                timestamp: Date.now(),
+              });
+            }
             break;
-          case 'tool:result':
+          }
+          case 'tool:result': {
+            const isError = event.data.isError as boolean;
             store.updateToolCall(event.data.id as string, {
-              status: event.data.isError ? 'error' : 'done',
+              status: isError ? 'error' : 'done',
               result: event.data.result as string,
-              isError: event.data.isError as boolean,
-              collapsed: !(event.data.isError as boolean),
+              isError,
+              collapsed: !isError,
+            });
+            cosmos.updateNode(event.data.id as string, {
+              status: isError ? 'error' : 'done',
+              content: event.data.result as string,
+              isError,
             });
             break;
+          }
           case 'tool:error':
             store.updateToolCall(event.data.id as string, {
               status: 'error',
@@ -128,6 +181,21 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     chat.addUserMessage(text);
     chat.setStatus('thinking');
 
+    // Start a new cosmos turn and add user node
+    const cosmos = useCosmosStore.getState();
+    currentCosmosTurnId = cosmos.nextTurn();
+    cosmos.addNode({
+      id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      kind: 'user',
+      content: text,
+      toolName: '',
+      params: {},
+      isError: false,
+      status: 'idle',
+      turnId: currentCosmosTurnId,
+      timestamp: Date.now(),
+    });
+
     try {
       const result = await agent.handle(text);
       // If it was a command (no stats), add the response as assistant message
@@ -135,8 +203,19 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         const id = chat.addAssistantMessage();
         chat.appendToAssistant(id, result.response);
         chat.finalizeAssistant(id);
+        // Also add as cosmos node
+        cosmos.addNode({
+          id: `cmd-${Date.now()}`,
+          kind: 'assistant',
+          content: result.response,
+          toolName: '',
+          params: {},
+          isError: false,
+          status: 'done',
+          turnId: currentCosmosTurnId,
+          timestamp: Date.now(),
+        });
       }
-      // Refresh task count after schedule/auto commands
       if (text.startsWith('/schedule') || text.startsWith('/auto')) {
         get().refreshTaskCount();
       }
@@ -152,11 +231,6 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     useChatStore.getState().setStatus('idle');
   },
 
-  /**
-   * Handle an autonomous injection (from scheduler/heartbeat).
-   * This is the key bridge: it shows the trigger message in the chat UI,
-   * then runs Agent.handle() so the LLM response also appears normally.
-   */
   handleInjection: async (prompt, source) => {
     const { agent } = get();
     if (!agent) return;
@@ -165,13 +239,24 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     log.info('autonomous injection', { source: msgSource, promptLength: prompt.length });
 
     const chat = useChatStore.getState();
-
-    // 1. Show the trigger message in chat (with source label)
     chat.addUserMessage(prompt, msgSource);
     chat.setStatus('thinking');
 
-    // 2. Tag the prompt for the LLM context and run through Agent.handle()
-    //    Set currentSource so onEvent handlers can propagate source to assistant messages
+    // Start a new cosmos turn and add user node for injection
+    const cosmos = useCosmosStore.getState();
+    currentCosmosTurnId = cosmos.nextTurn();
+    cosmos.addNode({
+      id: `inject-${Date.now()}`,
+      kind: 'user',
+      content: `[${source}] ${prompt}`,
+      toolName: '',
+      params: {},
+      isError: false,
+      status: 'idle',
+      turnId: currentCosmosTurnId,
+      timestamp: Date.now(),
+    });
+
     currentSource = msgSource;
     try {
       const taggedPrompt = `[${source}] ${prompt}`;
@@ -180,6 +265,17 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         const id = chat.addAssistantMessage(msgSource);
         chat.appendToAssistant(id, result.response);
         chat.finalizeAssistant(id);
+        cosmos.addNode({
+          id: `cmd-${Date.now()}`,
+          kind: 'assistant',
+          content: result.response,
+          toolName: '',
+          params: {},
+          isError: false,
+          status: 'done',
+          turnId: currentCosmosTurnId,
+          timestamp: Date.now(),
+        });
       }
     } catch (err: any) {
       chat.addError(err.message);

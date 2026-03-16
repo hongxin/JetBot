@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useChatStore } from '../store/chatStore';
 import { useConfigStore } from '../store/configStore';
 import { useAgentStore } from '../store/agentStore';
+import { useCosmosStore } from '../store/cosmosStore';
 import { SettingsDialog } from './SettingsDialog';
 import { TaskPanel } from './TaskPanel';
 import { LogPanel } from './LogPanel';
@@ -34,6 +35,8 @@ export function StatusBar() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [taskPanelOpen, setTaskPanelOpen] = useState(false);
   const [logPanelOpen, setLogPanelOpen] = useState(false);
+  const activeView = useCosmosStore(s => s.activeView);
+  const toggleView = useCosmosStore(s => s.toggleView);
   const t = useT();
 
   return (
@@ -64,6 +67,12 @@ export function StatusBar() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={toggleView}
+            className={`px-1.5 py-0.5 rounded text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors ${activeView === 'cosmos' ? 'bg-indigo-500/20 text-indigo-300' : ''}`}
+          >
+            {activeView === 'chat' ? '✦ Cosmos' : '◻ Chat'}
+          </button>
           <button
             onClick={() => setLocale(locale === 'en' ? 'zh' : 'en')}
             className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
