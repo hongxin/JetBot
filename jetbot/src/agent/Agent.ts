@@ -60,6 +60,13 @@ export class Agent {
     this.tools = new ToolRegistry(this.runtime.capabilities);
 
     this.permission = new PermissionManager(config.permissionConfirmFn);
+
+    // Sync tool permission levels → PermissionManager
+    // Without this, all tools default to 'dangerous' and prompt every time
+    for (const tool of this.tools.list()) {
+      this.permission.setLevel(tool.name, tool.permission);
+    }
+
     this.planMode = new PlanMode();
     this.skills = new SkillRegistry();
     this.onEvent = config.onEvent;
