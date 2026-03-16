@@ -85,7 +85,7 @@ export function ImportButton() {
 /**
  * DropZone wrapper — wraps children and handles drag-and-drop file import.
  */
-export function DropZone({ children }: { children: React.ReactNode }) {
+export function DropZone({ children, className }: { children: React.ReactNode; className?: string }) {
   const agent = useAgentStore(s => s.agent);
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
@@ -135,7 +135,7 @@ export function DropZone({ children }: { children: React.ReactNode }) {
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
-      className="flex flex-col min-h-0 w-full transition-all duration-150"
+      className={`flex flex-col min-h-0 min-w-0 transition-all duration-150 ${className ?? 'flex-1'}`}
     >
       {children}
     </div>

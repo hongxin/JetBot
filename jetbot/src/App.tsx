@@ -29,11 +29,9 @@ export default function App() {
       {/* Main content area: chat (+ optional right-side preview panel) */}
       <div className={`flex flex-1 min-h-0 ${hasPreviews ? '' : ''}`}>
         {/* Left: Chat + Input — wrapped in DropZone for file import */}
-        <DropZone>
-          <div className={`flex flex-col min-w-0 min-h-0 flex-1 ${hasPreviews ? 'max-w-[45%] min-w-[320px]' : ''} transition-all duration-300`}>
-            <ChatPanel />
-            <InputBar />
-          </div>
+        <DropZone className={hasPreviews ? 'w-[45%] min-w-[320px]' : 'flex-1'}>
+          <ChatPanel />
+          <InputBar />
         </DropZone>
 
         {/* Right: Preview panel — only when previews exist */}
