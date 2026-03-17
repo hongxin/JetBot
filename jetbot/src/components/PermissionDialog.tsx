@@ -4,7 +4,7 @@ import { useT } from '../lib/i18n';
 import { Modal } from './shared/Modal';
 
 /** Format tool params for display — code-heavy tools get special treatment */
-function formatParams(toolName: string, params: Record<string, unknown>) {
+function formatParams(_toolName: string, params: Record<string, unknown>) {
   const { code, ...rest } = params as { code?: string; [k: string]: unknown };
   const hasCode = typeof code === 'string';
   const hasRest = Object.keys(rest).length > 0;

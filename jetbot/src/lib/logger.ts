@@ -145,7 +145,12 @@ class Logger {
 }
 
 class ModuleLogger {
-  constructor(private logger: Logger, private mod: string) {}
+  private logger: Logger;
+  private mod: string;
+  constructor(logger: Logger, mod: string) {
+    this.logger = logger;
+    this.mod = mod;
+  }
 
   debug(msg: string, data?: Record<string, unknown>): void {
     this.logger.write('debug', this.mod, msg, data);

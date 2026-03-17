@@ -8,7 +8,7 @@ const STATUS_ICON: Record<string, string> = {
 };
 
 /** Extract the single most important param as a compact hint */
-function paramHint(name: string, params: Record<string, unknown>): string {
+function paramHint(_name: string, params: Record<string, unknown>): string {
   // Pick the most meaningful param based on tool name
   const key = params.path ?? params.pattern ?? params.command ?? params.code ?? params.content;
   if (!key) {

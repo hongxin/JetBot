@@ -146,8 +146,9 @@ export function profileToPrompt(profile: RuntimeProfile): string {
 
 function detectRuntimeType(): RuntimeType {
   if (typeof window !== 'undefined' && typeof document !== 'undefined') return 'browser';
-  if (typeof globalThis.WorkerGlobalScope !== 'undefined') return 'worker';
-  if (typeof process !== 'undefined' && process.versions?.node) return 'node';
+  if (typeof (globalThis as Record<string, unknown>).WorkerGlobalScope !== 'undefined') return 'worker';
+  const g = globalThis as Record<string, unknown>;
+  if (typeof g.process !== 'undefined' && (g.process as { versions?: { node?: string } })?.versions?.node) return 'node';
   return 'unknown';
 }
 

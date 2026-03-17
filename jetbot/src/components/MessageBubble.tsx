@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import type { UIMessage } from '../store/chatStore';
 import { renderMarkdown } from '../lib/markdown';
 import { BrailleSpinner } from './shared/Spinner';
