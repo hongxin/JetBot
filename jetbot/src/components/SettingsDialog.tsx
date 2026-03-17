@@ -4,8 +4,12 @@ import { useAgentStore } from '../store/agentStore';
 import { useT } from '../lib/i18n';
 import { Modal } from './shared/Modal';
 
-const PROVIDER_LABELS: Record<string, string> = {
-  openai: 'OpenAI', deepseek: 'DeepSeek', zhipu: 'ZhipuAI', ollama: 'Ollama', custom: 'Custom',
+const PROVIDER_LABELS: Record<string, Record<string, string>> = {
+  openai: { en: 'OpenAI', zh: 'OpenAI' },
+  deepseek: { en: 'DeepSeek', zh: 'DeepSeek' },
+  zhipu: { en: 'Zhipu', zh: '智谱' },
+  ollama: { en: 'Ollama', zh: 'Ollama' },
+  custom: { en: 'Custom', zh: '自定义' },
 };
 
 interface Props {
@@ -65,7 +69,7 @@ export function SettingsDialog({ open, onClose }: Props) {
                       : 'border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))]'
                   }`}
                 >
-                  {PROVIDER_LABELS[p] ?? p}
+                  {PROVIDER_LABELS[p]?.[config.locale] ?? p}
                 </button>
               ))}
             </div>

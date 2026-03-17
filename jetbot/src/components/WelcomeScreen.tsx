@@ -4,12 +4,12 @@ import { useAgentStore } from '../store/agentStore';
 import { useT } from '../lib/i18n';
 
 const PROVIDERS = ['openai', 'deepseek', 'zhipu', 'ollama', 'custom'] as const;
-const PROVIDER_LABELS: Record<string, string> = {
-  openai: 'OpenAI',
-  deepseek: 'DeepSeek',
-  zhipu: 'ZhipuAI (智谱)',
-  ollama: 'Ollama',
-  custom: 'Custom',
+const PROVIDER_LABELS: Record<string, Record<string, string>> = {
+  openai: { en: 'OpenAI', zh: 'OpenAI' },
+  deepseek: { en: 'DeepSeek', zh: 'DeepSeek' },
+  zhipu: { en: 'Zhipu', zh: '智谱' },
+  ollama: { en: 'Ollama', zh: 'Ollama' },
+  custom: { en: 'Custom', zh: '自定义' },
 };
 const KEY_OPTIONAL = new Set(['ollama']);
 
@@ -65,7 +65,7 @@ export function WelcomeScreen() {
                       : 'border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))]'
                   }`}
                 >
-                  {PROVIDER_LABELS[p]}
+                  {PROVIDER_LABELS[p]?.[locale] ?? p}
                 </button>
               ))}
             </div>
