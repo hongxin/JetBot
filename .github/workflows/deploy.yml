@@ -28,7 +28,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: jetbot
-        run: npm install --legacy-peer-deps
+        run: npm ci
 
       - name: Build
         working-directory: jetbot
