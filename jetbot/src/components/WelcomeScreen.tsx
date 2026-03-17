@@ -3,10 +3,11 @@ import { useConfigStore } from '../store/configStore';
 import { useAgentStore } from '../store/agentStore';
 import { useT } from '../lib/i18n';
 
-const PROVIDERS = ['openai', 'deepseek', 'ollama', 'custom'] as const;
+const PROVIDERS = ['openai', 'deepseek', 'zhipu', 'ollama', 'custom'] as const;
 const PROVIDER_LABELS: Record<string, string> = {
   openai: 'OpenAI',
   deepseek: 'DeepSeek',
+  zhipu: 'ZhipuAI (智谱)',
   ollama: 'Ollama',
   custom: 'Custom',
 };

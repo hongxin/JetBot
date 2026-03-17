@@ -4,6 +4,10 @@ import { useAgentStore } from '../store/agentStore';
 import { useT } from '../lib/i18n';
 import { Modal } from './shared/Modal';
 
+const PROVIDER_LABELS: Record<string, string> = {
+  openai: 'OpenAI', deepseek: 'DeepSeek', zhipu: 'ZhipuAI', ollama: 'Ollama', custom: 'Custom',
+};
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -51,7 +55,7 @@ export function SettingsDialog({ open, onClose }: Props) {
           <div>
             <label className="text-xs font-medium text-[hsl(var(--muted-foreground))] mb-1 block">{t('settings.provider')}</label>
             <div className="flex gap-2">
-              {['openai', 'deepseek', 'ollama', 'custom'].map(p => (
+              {['openai', 'deepseek', 'zhipu', 'ollama', 'custom'].map(p => (
                 <button
                   key={p}
                   onClick={() => config.applyPreset(p)}
@@ -61,7 +65,7 @@ export function SettingsDialog({ open, onClose }: Props) {
                       : 'border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))]'
                   }`}
                 >
-                  {p}
+                  {PROVIDER_LABELS[p] ?? p}
                 </button>
               ))}
             </div>
