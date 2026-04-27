@@ -1,6 +1,9 @@
 import type { Skill } from './types';
 
-export const builtinSkills: Skill[] = [
+/** Base skill definition — lifecycle fields are filled in by SkillRegistry at seed time */
+type BuiltinSkillDef = Pick<Skill, 'name' | 'description' | 'trigger' | 'instructions'>;
+
+export const builtinSkills: BuiltinSkillDef[] = [
   {
     name: 'debug',
     description: 'Systematic debugging — find root cause before fixing',
