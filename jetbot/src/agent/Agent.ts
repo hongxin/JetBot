@@ -260,6 +260,8 @@ export class Agent {
       case '/help':
         return { response: this.helpText() };
       case '/clear':
+        this.skills.saveAll().catch(() => {});
+        this.sessionStore.end().catch(() => {});
         this.context.clear();
         return { response: t('cmd.cleared') };
       case '/status':
@@ -367,6 +369,17 @@ export class Agent {
       }
       this.skills.deactivate();
       return { response: t('skill.deactivated') };
+    }
+    if (sub === 'export') {
+      const name = args[1];
+      if (!name) return { response: 'Usage: /skill export <name>' };
+      const content = this.skills.exportSkill(name);
+      if (!content) return { response: `${t('skill.notFound')}: ${name}` };
+      const event = new CustomEvent('jetbot:export', {
+        detail: { content, filename: `${name}.SKILL.md`, path: `/${name}.SKILL.md` },
+      });
+      document.dispatchEvent(event);
+      return { response: `Exported **${name}** -> \`${name}.SKILL.md\`` };
     }
     // Activate by name
     const ok = this.skills.activate(sub);
