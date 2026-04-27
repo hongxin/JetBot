@@ -269,6 +269,19 @@ export class SkillRegistry {
     }
   }
 
+  /** Delete a skill (non-builtin only) */
+  remove(name: string): boolean {
+    const s = this.skills.get(name);
+    if (!s || s.originManual) return false;
+    this.skills.delete(name);
+    if (this.activeSkill === name) this.activeSkill = null;
+    import('../lib/db').then(m => m.del('jetbot', STORE_NAME, name)).catch(() => {});
+    return true;
+  }
+
+  /** Count */
+  countAll(): number { return this.skills.size; }
+
   /** Usage stats for /status */
   usageStats(name: string): { useCount: number; qualityScore: number; stage: LifecycleStage } | null {
     const s = this.skills.get(name);

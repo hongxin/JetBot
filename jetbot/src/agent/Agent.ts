@@ -370,6 +370,36 @@ export class Agent {
       this.skills.deactivate();
       return { response: t('skill.deactivated') };
     }
+    if (sub === 'status') {
+      const name = args[1];
+      if (!name) return { response: 'Usage: /skill status <name>' };
+      const stats = this.skills.usageStats(name);
+      if (!stats) return { response: `${t('skill.notFound')}: ${name}` };
+      const s = this.skills.get(name)!;
+      const stageLabel: Record<string, string> = {
+        new: '✿ New', active: '● Active', stable: '★ Stable', stale: '⏳ Stale', deprecated: '✗ Deprecated',
+      };
+      return { response: [
+        `**${s.name}** v${s.version}`,
+        `Description: ${s.description}`,
+        `Stage: ${stageLabel[s.lifecycleStage] || s.lifecycleStage}`,
+        `Usage: ${stats.useCount} | Quality: ${(stats.qualityScore * 100).toFixed(0)}%`,
+        `Origin: ${s.originManual ? 'Built-in/Manual' : 'Distilled'}`,
+        `Created: ${new Date(s.createdAt).toLocaleDateString()}`,
+        s.lastUsedAt ? `Last used: ${new Date(s.lastUsedAt).toLocaleDateString()}` : '',
+        s.trigger ? `Triggers: ${s.trigger}` : '',
+        s.tools?.length ? `Tools: ${s.tools.join(', ')}` : '',
+      ].filter(Boolean).join('\n') };
+    }
+    if (sub === 'delete') {
+      const name = args[1];
+      if (!name) return { response: 'Usage: /skill delete <name>' };
+      const s = this.skills.get(name);
+      if (!s) return { response: `${t('skill.notFound')}: ${name}` };
+      if (s.originManual) return { response: 'Cannot delete built-in skills.' };
+      this.skills.remove(name);
+      return { response: `Deleted skill: **${name}**` };
+    }
     if (sub === 'export') {
       const name = args[1];
       if (!name) return { response: 'Usage: /skill export <name>' };
@@ -652,6 +682,18 @@ export class Agent {
 
   getToolRegistry(): ToolRegistry {
     return this.tools;
+  }
+
+  getSkillRegistry(): SkillRegistry {
+    return this.skills;
+  }
+
+  getSessionStore(): SessionStore {
+    return this.sessionStore;
+  }
+
+  getMemoryStore(): MemoryStore {
+    return this.memoryStore;
   }
 
   private helpText(): string {

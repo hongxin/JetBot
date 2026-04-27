@@ -157,6 +157,14 @@ const translations = {
   'memory.cleared': { en: 'All memories cleared.', zh: '所有记忆已清空。' },
   'memory.usage': { en: 'Usage: /memory list | add [cat] <content> | remove <id> | clear', zh: '用法：/memory list | add [类别] <内容> | remove <id> | clear' },
 
+    // Skills panel
+  'skills.panel.import': { en: 'Import SKILL.md', zh: '导入 SKILL.md' },
+  'skills.panel.paste': { en: 'Paste SKILL.md content here...', zh: '粘贴 SKILL.md 内容...' },
+  'skills.panel.importBtn': { en: 'Import', zh: '导入' },
+  'skills.panel.noSkills': { en: 'No skills yet.', zh: '暂无技能' },
+  'skills.panel.delete': { en: 'Delete', zh: '删除' },
+  'skills.panel.export': { en: 'Export', zh: '导出' },
+
   // Cosmos
   'cosmos.toggle': { en: 'Cosmos', zh: '宇宙' },
   'cosmos.empty': { en: 'Send a message — your conversation will bloom as cosmic bubbles', zh: '发送消息，对话将化为星辰泡泡绽放于此' },
