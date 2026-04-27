@@ -38,7 +38,8 @@ export class OpenAICompatibleClient implements LLMClient {
   }
 
   async complete(req: CompletionRequest, onStream?: (chunk: string) => void, onReasoningStream?: (chunk: string) => void): Promise<CompletionResponse> {
-    const url = resolveProxyUrl(`${this.config.baseUrl}/chat/completions`, this.config.proxyUrl);
+    const url = resolveProxyUrl(`${this.config.baseUrl}/chat/completions`, this.config.proxyUrl?.trim());
+    log.debug('resolved url', { url: url.substring(0, 100) });
     const body: Record<string, unknown> = {
       model: this.config.modelId,
       messages: req.messages,
