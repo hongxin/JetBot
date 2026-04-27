@@ -47,7 +47,7 @@ export class MemoryStore {
       content,
     };
     this.entries.push(entry);
-    try { await put(STORE_NAME, entry, String(entry.id)); } catch {}
+    try { await put(STORE_NAME, entry); } catch {}
     return entry;
   }
 
