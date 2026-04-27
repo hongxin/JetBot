@@ -60,6 +60,10 @@ const translations = {
   'settings.cancel': { en: 'Cancel', zh: '取消' },
   'settings.save': { en: 'Save', zh: '保存' },
   'settings.language': { en: 'Language', zh: '语言' },
+  'settings.thinkingMode': { en: 'Thinking Mode', zh: '思考模式' },
+  'settings.thinking.non': { en: 'Non-Thinking (Fast)', zh: '非思考（快速）' },
+  'settings.thinking.thinking': { en: 'Thinking (Balanced)', zh: '思考（平衡）' },
+  'settings.thinking.thinking_max': { en: 'Max Thinking (Deep)', zh: '深度思考（最强）' },
 
   // Validation
   'validate.apiKey': { en: 'API Key is required', zh: 'API 密钥不能为空' },
@@ -131,6 +135,27 @@ const translations = {
   'log.entries': { en: 'entries', zh: '条' },
   'log.modules': { en: 'modules', zh: '个模块' },
   'status.logs': { en: 'Logs', zh: '日志' },
+
+    // Sessions
+  'sessions.list': { en: 'Archived sessions', zh: '归档会话' },
+  'sessions.empty': { en: 'No archived sessions.', zh: '暂无归档会话。' },
+  'sessions.search': { en: 'Search results', zh: '搜索结果' },
+  'sessions.searchUsage': { en: 'Usage: /sessions search <query>', zh: '用法：/sessions search <关键词>' },
+  'sessions.noResults': { en: 'No results found for', zh: '未找到相关结果' },
+  'sessions.recallUsage': { en: 'Usage: /sessions recall <query>', zh: '用法：/sessions recall <关键词>' },
+  'sessions.pruned': { en: 'Archived sessions pruned', zh: '已清理归档会话' },
+  'sessions.usage': { en: 'Usage: /sessions list | search <q> | recall <q> | prune <days>', zh: '用法：/sessions list | search <关键词> | recall <关键词> | prune <天数>' },
+
+  // Memory
+  'memory.list': { en: 'Memory entries', zh: '记忆条目' },
+  'memory.empty': { en: 'No memories. Use /memory add <category> <content> to add.', zh: '暂无记忆。使用 /memory add <类别> <内容> 添加。' },
+  'memory.added': { en: 'Memory added', zh: '已添加记忆' },
+  'memory.addUsage': { en: 'Usage: /memory add [preference|project|decision|fact] <content>', zh: '用法：/memory add [preference|project|decision|fact] <内容>' },
+  'memory.removed': { en: 'Memory removed.', zh: '已删除记忆。' },
+  'memory.removeUsage': { en: 'Usage: /memory remove <id>', zh: '用法：/memory remove <id>' },
+  'memory.notFound': { en: 'Memory entry not found.', zh: '未找到该记忆。' },
+  'memory.cleared': { en: 'All memories cleared.', zh: '所有记忆已清空。' },
+  'memory.usage': { en: 'Usage: /memory list | add [cat] <content> | remove <id> | clear', zh: '用法：/memory list | add [类别] <内容> | remove <id> | clear' },
 
   // Cosmos
   'cosmos.toggle': { en: 'Cosmos', zh: '宇宙' },

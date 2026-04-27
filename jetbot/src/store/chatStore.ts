@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { DistillProposal } from '../agent/SkillDistiller';
 
 export interface UIToolCallBlock {
   id: string;
@@ -17,11 +18,14 @@ export interface UIMessage {
   id: string;
   role: 'user' | 'assistant' | 'error';
   content: string;
+  reasoningContent?: string;
   toolCalls: UIToolCallBlock[];
   isStreaming: boolean;
   timestamp: number;
   /** Set for autonomously injected messages. */
   source?: MessageSource;
+  /** Set when this message is a distillation proposal */
+  distillProposal?: DistillProposal;
 }
 
 export type AgentStatus = 'idle' | 'thinking' | 'executing_tool' | 'waiting_permission' | 'error';
@@ -45,6 +49,7 @@ interface ChatState {
   addUserMessage: (text: string, source?: MessageSource) => void;
   addAssistantMessage: (source?: MessageSource) => string;
   appendToAssistant: (id: string, chunk: string) => void;
+  setReasoning: (id: string, reasoning: string) => void;
   finalizeAssistant: (id: string) => void;
   addToolCall: (msgId: string, tc: { id: string; name: string; params: Record<string, unknown> }) => void;
   updateToolCall: (tcId: string, update: Partial<UIToolCallBlock>) => void;
@@ -53,6 +58,8 @@ interface ChatState {
   setPendingPermission: (pp: PendingPermission | null) => void;
   setIteration: (n: number) => void;
   clearMessages: () => void;
+  addDistillProposal: (proposal: DistillProposal, source?: MessageSource) => string;
+  resolveDistillProposal: (msgId: string, accepted: boolean) => void;
 }
 
 let msgCounter = 0;
@@ -117,6 +124,10 @@ export const useChatStore = create<ChatState>((set) => ({
     };
   })(),
 
+  setReasoning: (id, reasoning) => set(s => ({
+    messages: s.messages.map(m => m.id === id ? { ...m, reasoningContent: (m.reasoningContent ?? '') + reasoning } : m),
+  })),
+
   finalizeAssistant: (id) => set(s => ({
     messages: s.messages.map(m => m.id === id ? { ...m, isStreaming: false } : m),
   })),
@@ -150,4 +161,31 @@ export const useChatStore = create<ChatState>((set) => ({
   setPendingPermission: (pendingPermission) => set({ pendingPermission }),
   setIteration: (currentIteration) => set({ currentIteration }),
   clearMessages: () => set({ messages: [], currentIteration: 0 }),
+
+  addDistillProposal: (proposal, source?) => {
+    const id = `msg-${++msgCounter}`;
+    set(s => ({
+      messages: [...s.messages, {
+        id,
+        role: 'assistant',
+        content: `提炼出新 Skill: **${proposal.name}** — ${proposal.description}`,
+        toolCalls: [],
+        isStreaming: false,
+        timestamp: Date.now(),
+        source,
+        distillProposal: proposal,
+      }],
+    }));
+    return id;
+  },
+
+  resolveDistillProposal: (msgId, accepted) => set(s => ({
+    messages: s.messages.map(m => {
+      if (m.id !== msgId) return m;
+      if (accepted && m.distillProposal) {
+        return { ...m, content: m.content + '\n\n已保存。', distillProposal: undefined };
+      }
+      return { ...m, content: m.content + '\n\n已舍弃。', distillProposal: undefined };
+    }),
+  })),
 }));

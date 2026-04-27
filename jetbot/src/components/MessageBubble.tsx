@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import type { UIMessage } from '../store/chatStore';
 import { renderMarkdown } from '../lib/markdown';
+import { DistillCard } from './DistillCard';
 import { BrailleSpinner } from './shared/Spinner';
 
 const SOURCE_LABEL: Record<string, { text: string; color: string }> = {
@@ -30,9 +32,7 @@ function ThinkingSpinner() {
         fill="none"
         style={{ animationDuration: '1.2s' }}
       >
-        {/* Outer ring */}
         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.15" strokeWidth="2.5" />
-        {/* Two fire arcs — 风火轮 style */}
         <path
           d="M12 2a10 10 0 0 1 8.66 5"
           stroke="url(#fire1)"
@@ -67,6 +67,32 @@ interface Props {
   message: UIMessage;
 }
 
+function ReasoningBlock({ content }: { content: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="mb-2 border border-purple-500/20 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-purple-400 bg-purple-500/10 hover:bg-purple-500/15 transition-colors"
+      >
+        <svg
+          className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
+          viewBox="0 0 24 24"
+          fill="currentColor"
+        >
+          <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
+        </svg>
+        <span className="font-medium">Reasoning</span>
+      </button>
+      {expanded && (
+        <div className="px-3 py-2 text-xs text-[hsl(var(--muted-foreground))] bg-purple-500/5 max-h-60 overflow-y-auto whitespace-pre-wrap">
+          {content}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MessageBubble({ message }: Props) {
   if (message.role === 'error') {
     return (
@@ -92,7 +118,7 @@ export function MessageBubble({ message }: Props) {
   }
 
   // Assistant — show spinner when streaming with no content yet, cursor when streaming with content
-  const isThinking = message.isStreaming && !message.content;
+  const isThinking = message.isStreaming && !message.content && !message.reasoningContent;
   const isStreamingContent = message.isStreaming && !!message.content;
 
   return (
@@ -104,6 +130,9 @@ export function MessageBubble({ message }: Props) {
             <ThinkingSpinner />
           ) : (
             <>
+              {message.reasoningContent && (
+                <ReasoningBlock content={message.reasoningContent} />
+              )}
               <div dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }} />
               {isStreamingContent && (
                 <BrailleSpinner className="inline-block ml-1 text-[hsl(var(--muted-foreground))]" />
@@ -111,6 +140,23 @@ export function MessageBubble({ message }: Props) {
             </>
           )}
         </div>
+        {message.distillProposal && (
+          <DistillCard
+            proposal={message.distillProposal}
+            onSave={() => {
+              const event = new CustomEvent('jetbot:distill:save', {
+                detail: { msgId: message.id, proposal: message.distillProposal },
+              });
+              document.dispatchEvent(event);
+            }}
+            onDiscard={() => {
+              const event = new CustomEvent('jetbot:distill:discard', {
+                detail: { msgId: message.id },
+              });
+              document.dispatchEvent(event);
+            }}
+          />
+        )}
       </div>
     </div>
   );

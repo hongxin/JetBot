@@ -95,6 +95,22 @@ export class SystemPromptBuilder {
     this.setSection('tools', 30, `# Available Tools\n${list}`);
   }
 
+  setMemoryContext(memoryText: string): void {
+    if (memoryText) {
+      this.setSection('memory', 35, memoryText);
+    } else {
+      this.removeSection('memory');
+    }
+  }
+
+  setSessionRecall(recallText: string): void {
+    if (recallText) {
+      this.setSection('sessionRecall', 36, recallText);
+    } else {
+      this.removeSection('sessionRecall');
+    }
+  }
+
   setSkillMenu(skills: Array<{ name: string; description: string }>): void {
     if (skills.length === 0) return;
     const list = skills.map(s => `- ${s.name}: ${s.description}`).join('\n');
