@@ -1,7 +1,7 @@
 // src/lib/db.ts — IndexedDB wrapper with centralized DB init
 
 const DB_NAME = 'jetbot';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 /** All object stores. Keep in sync when adding new stores. */
 const STORES = [
