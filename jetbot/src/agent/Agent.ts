@@ -108,7 +108,6 @@ export class Agent {
     this.promptBuilder.setToolDescriptions(
       this.tools.schemas().map(s => ({ name: s.function.name, description: s.function.description }))
     );
-    this.promptBuilder.setSkillMenu(this.skills.list());
 
     log.info('agent initialized', {
       runtime: this.runtime.type,
@@ -137,6 +136,7 @@ export class Agent {
       await this.sessionIndex.ready();
       await this.memoryStore.ready();
       await this.skills.ready();
+      this.promptBuilder.setSkillMenu(this.skills.list());
       await this.sessionStore.start('browser', this.llm.model());
 
       // Inject memory context
@@ -152,6 +152,9 @@ export class Agent {
     this.context.adaptForModel(this.llm.model());
 
     this.context.addUserMessage(input);
+
+    // Refresh skill menu each turn — skills may change via UI or distill events
+    this.promptBuilder.setSkillMenu(this.skills.list());
 
     // Build system prompt with plan mode and active skill
     let systemPrompt = this.promptBuilder.build();

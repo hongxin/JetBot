@@ -113,7 +113,22 @@ export class SystemPromptBuilder {
 
   setSkillMenu(skills: Array<{ name: string; description: string }>): void {
     if (skills.length === 0) return;
-    const list = skills.map(s => `- ${s.name}: ${s.description}`).join('\n');
-    this.setSection('skills', 40, `<available_skills>\n${list}\n</available_skills>`);
+    const list = skills.map(s => `- **${s.name}**: ${s.description}`).join('\n');
+    const preamble = [
+      '# Available Skills',
+      '',
+      'Skills are specialized behavior modes that change how you approach tasks.',
+      'Each skill provides domain-specific instructions and workflows.',
+      '',
+      'How to use skills:',
+      '- Suggest a relevant skill when the user asks for something matching its trigger or description.',
+      '- Users activate a skill by typing `/skill <name>`. They deactivate with `/skill off`.',
+      '- When a skill is active, its instructions are injected into your system prompt as `# Active Skill`.',
+      '- You can list all skills by suggesting `/skill list`.',
+      '- If unsure which skill fits, describe 2-3 options and let the user pick.',
+      '',
+      'Current skill catalog:',
+    ].join('\n');
+    this.setSection('skills', 40, `${preamble}\n${list}`);
   }
 }

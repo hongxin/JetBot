@@ -133,7 +133,7 @@ export class SkillRegistry {
 
   get(name: string): Skill | undefined { return this.skills.get(name); }
 
-  addSkill(name: string, description: string, triggers: string[], tools: string[], instructions: string): Skill {
+  addSkill(name: string, description: string, triggers: string[], tools: string[], instructions: string, originManual = false): Skill {
     const skill: Skill = {
       name, description,
       trigger: triggers.join(', '),
@@ -145,7 +145,7 @@ export class SkillRegistry {
       qualityScore: 0.5,
       lifecycleStage: 'new',
       createdAt: new Date().toISOString(),
-      originManual: false,
+      originManual,
     };
     this.skills.set(name, skill);
     this.persistSkill(skill).catch(() => {});
@@ -236,6 +236,7 @@ export class SkillRegistry {
       (fm['trigger'] || '').split(',').map(s => s.trim()).filter(Boolean),
       tools,
       body.trim(),
+      true,
     );
   }
 
