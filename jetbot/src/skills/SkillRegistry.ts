@@ -95,7 +95,7 @@ export class SkillRegistry {
   }
 
   private async persistSkill(skill: Skill): Promise<void> {
-    try { await put(STORE_NAME, skill, skill.name); } catch {}
+    try { await put(STORE_NAME, skill); } catch {}
   }
 
   async ready(): Promise<void> { return this.dbReady; }
@@ -257,7 +257,7 @@ export class SkillRegistry {
 
   async saveAll(): Promise<void> {
     for (const skill of this.skills.values()) {
-      try { await put(STORE_NAME, skill, skill.name); } catch {}
+      try { await put(STORE_NAME, skill); } catch {}
     }
   }
 

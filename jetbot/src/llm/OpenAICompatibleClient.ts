@@ -11,16 +11,25 @@ export interface ClientConfig {
   modelId: string;
   timeout?: number;
   proxyUrl?: string;
+  thinkingMode?: 'non-thinking' | 'thinking' | 'thinking_max';
+  provider?: string;
 }
+
+const DEEPSEEK_THINKING_TIMEOUT = 300_000;
+const DEFAULT_TIMEOUT = 120_000;
 
 export class OpenAICompatibleClient implements LLMClient {
   private config: Required<ClientConfig>;
 
   constructor(config: ClientConfig) {
+    const isThinkingMode = config.thinkingMode && config.thinkingMode !== 'non-thinking';
+    const defaultTimeout = isThinkingMode ? DEEPSEEK_THINKING_TIMEOUT : DEFAULT_TIMEOUT;
     this.config = {
       ...config,
-      timeout: config.timeout ?? 60000,
+      timeout: config.timeout ?? defaultTimeout,
       proxyUrl: config.proxyUrl ?? '',
+      thinkingMode: config.thinkingMode ?? 'non-thinking',
+      provider: config.provider ?? '',
     };
   }
 
@@ -28,26 +37,37 @@ export class OpenAICompatibleClient implements LLMClient {
     return this.config.modelId;
   }
 
-  async complete(req: CompletionRequest, onStream?: (chunk: string) => void): Promise<CompletionResponse> {
+  async complete(req: CompletionRequest, onStream?: (chunk: string) => void, onReasoningStream?: (chunk: string) => void): Promise<CompletionResponse> {
     const url = resolveProxyUrl(`${this.config.baseUrl}/chat/completions`, this.config.proxyUrl);
     const body: Record<string, unknown> = {
       model: this.config.modelId,
       messages: req.messages,
       stream: !!onStream,
     };
+
+    // DeepSeek V4 recommended sampling parameters
+    if (this.isDeepSeek()) {
+      body.temperature = 1.0;
+      body.top_p = 1.0;
+
+      if (this.config.thinkingMode !== 'non-thinking') {
+        body.thinking = { type: 'enabled' };
+      }
+    }
+
     if (req.tools && req.tools.length > 0) {
       body.tools = req.tools;
       body.tool_choice = req.tool_choice ?? 'auto';
     }
 
-    log.debug('request', { model: this.config.modelId, messages: req.messages.length, tools: req.tools?.length ?? 0, stream: !!onStream });
+    log.debug('request', { model: this.config.modelId, messages: req.messages.length, tools: req.tools?.length ?? 0, stream: !!onStream, thinking: this.config.thinkingMode });
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
     let response: Response;
     let retries = 0;
-    const maxRetries = 2;
+    const maxRetries = 3;
 
     while (true) {
       try {
@@ -71,8 +91,9 @@ export class OpenAICompatibleClient implements LLMClient {
         }
         if (retries < maxRetries) {
           retries++;
-          log.warn('retrying request', { attempt: retries, error: err.message });
-          await this.delay(retries * 1000);
+          const delay = 500 * Math.pow(2, retries);
+          log.warn('retrying request', { attempt: retries, delay, error: err.message });
+          await this.delay(delay);
           continue;
         }
         throw new LLMError(`Network error: ${err.message}`, 'NETWORK', true);
@@ -97,7 +118,7 @@ export class OpenAICompatibleClient implements LLMClient {
     }
 
     if (onStream && body.stream) {
-      return this.handleStream(response, onStream, controller.signal);
+      return this.handleStream(response, onStream, onReasoningStream, controller.signal);
     }
 
     const json = await response.json();
@@ -112,6 +133,7 @@ export class OpenAICompatibleClient implements LLMClient {
     const msg = choice.message;
     return {
       content: msg?.content ?? '',
+      reasoningContent: msg?.reasoning_content ?? undefined,
       toolCalls: (msg?.tool_calls ?? []).map((tc: any) => ({
         id: tc.id,
         name: tc.function.name,
@@ -125,18 +147,16 @@ export class OpenAICompatibleClient implements LLMClient {
     };
   }
 
-  private async handleStream(response: Response, onStream: (chunk: string) => void, _signal?: AbortSignal): Promise<CompletionResponse> {
+  private async handleStream(response: Response, onStream: (chunk: string) => void, onReasoningStream?: (chunk: string) => void, _signal?: AbortSignal): Promise<CompletionResponse> {
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    const contentChunks: string[] = []; // Array-based to avoid O(n²) string concat
+    const contentChunks: string[] = [];
+    const reasoningChunks: string[] = [];
     const toolCallMap = new Map<number, { id: string; name: string; argChunks: string[] }>();
     let finishReason: string | null = null;
     let usage: { prompt_tokens: number; completion_tokens: number } | undefined;
 
-    // Racing idle timeout: if reader.read() blocks longer than this, we abort.
-    // Unlike the old synchronous check, this uses Promise.race so it actually
-    // interrupts a blocking read.
     const STREAM_IDLE_TIMEOUT = 30_000;
 
     const readWithTimeout = (): Promise<ReadableStreamReadResult<Uint8Array>> => {
@@ -189,6 +209,12 @@ export class OpenAICompatibleClient implements LLMClient {
 
           const delta = parsed.choices?.[0]?.delta;
 
+          // Reasoning content delta (DeepSeek V4 thinking mode)
+          if (delta?.reasoning_content) {
+            reasoningChunks.push(delta.reasoning_content);
+            if (onReasoningStream) onReasoningStream(delta.reasoning_content);
+          }
+
           // Content delta
           if (delta?.content) {
             contentChunks.push(delta.content);
@@ -216,8 +242,6 @@ export class OpenAICompatibleClient implements LLMClient {
             usage = { prompt_tokens: parsed.usage.prompt_tokens, completion_tokens: parsed.usage.completion_tokens };
           }
 
-          // Ollama and some providers don't send "data: [DONE]" — they just
-          // set finish_reason on the last chunk. Treat that as stream end.
           if (finishReason) {
             streamDone = true;
             break;
@@ -226,19 +250,24 @@ export class OpenAICompatibleClient implements LLMClient {
         if (streamDone) break;
       }
     } finally {
-      // Ensure reader is always released, even on unexpected errors
       reader.cancel().catch(() => {});
     }
 
-    const content = contentChunks.join(''); // Single join at end — O(n) total
-    log.debug('stream complete', { contentLength: content.length, toolCalls: toolCallMap.size, finishReason });
+    const content = contentChunks.join('');
+    const reasoningContent = reasoningChunks.length > 0 ? reasoningChunks.join('') : undefined;
+    log.debug('stream complete', { contentLength: content.length, reasoningLength: reasoningContent?.length ?? 0, toolCalls: toolCallMap.size, finishReason });
 
     return {
       content,
+      reasoningContent,
       toolCalls: [...toolCallMap.values()].map(tc => ({ id: tc.id, name: tc.name, arguments: tc.argChunks.join('') })),
       usage,
       finishReason,
     };
+  }
+
+  private isDeepSeek(): boolean {
+    return this.config.provider === 'deepseek' || this.config.modelId.startsWith('deepseek');
   }
 
   private delay(ms: number): Promise<void> {

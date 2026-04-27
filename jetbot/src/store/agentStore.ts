@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Agent } from '../agent/Agent';
 import { OpenAICompatibleClient } from '../llm/OpenAICompatibleClient';
-import { useConfigStore } from './configStore';
+import { useConfigStore, resolveLegacyModel } from './configStore';
 import { useChatStore, type MessageSource, type PermissionResponse } from './chatStore';
 import type { AgentEvent } from '../types/message';
 import type { Scheduler } from '../scheduler/Scheduler';
@@ -40,11 +40,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   initAgent: () => {
     const config = useConfigStore.getState();
 
+    const resolvedModel = resolveLegacyModel(config.model);
     const llm = new OpenAICompatibleClient({
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
-      modelId: config.model,
+      modelId: resolvedModel,
       proxyUrl: config.proxyUrl,
+      provider: config.provider,
+      thinkingMode: config.thinkingMode,
     });
 
     const agent = new Agent({
@@ -85,6 +88,12 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           }
           case 'llm:chunk':
             store.appendToAssistant(currentMsgId, event.data.chunk as string);
+            break;
+          case 'llm:reasoning_chunk':
+            store.setReasoning(currentMsgId, event.data.chunk as string);
+            break;
+          case 'llm:reasoning':
+            store.setReasoning(currentMsgId, event.data.content as string);
             break;
           case 'llm:response': {
             store.finalizeAssistant(currentMsgId);

@@ -21,7 +21,7 @@ export function WelcomeScreen() {
   const t = useT();
 
   const isKeyOptional = KEY_OPTIONAL.has(config.provider);
-  const canStart = config.validate().valid;
+  const canStart = isKeyOptional ? config.baseUrl !== '' && config.model !== '' : config.apiKey !== '';
 
   const handleStart = () => {
     const { valid, errors } = config.validate();
@@ -71,7 +71,11 @@ export function WelcomeScreen() {
             </div>
           </div>
 
-          {!isKeyOptional && (
+          {isKeyOptional ? (
+            <p className="text-xs text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] rounded-xl px-4 py-3">
+              {t('welcome.ollamaHint')}
+            </p>
+          ) : (
             <div>
               <label className="text-xs font-medium text-[hsl(var(--muted-foreground))] mb-1 block">{t('welcome.apiKey')}</label>
               <div className="flex gap-2">
@@ -84,7 +88,7 @@ export function WelcomeScreen() {
                 />
                 <button
                   onClick={() => setShowKey(!showKey)}
-                  className="text-xs text-[hsl(var(--muted-foreground))]"
+                  className="text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
                 >
                   {showKey ? t('welcome.hide') : t('welcome.show')}
                 </button>
@@ -94,45 +98,22 @@ export function WelcomeScreen() {
               </p>
             </div>
           )}
-
-          {isKeyOptional && (
-            <div className="bg-[hsl(var(--muted))] rounded-xl px-4 py-3 text-xs text-[hsl(var(--muted-foreground))]">
-              {t('welcome.ollamaHint')}
-            </div>
-          )}
-
-          {(config.provider === 'custom' || config.provider === 'ollama') && (
-            <>
-              <div>
-                <label className="text-xs font-medium text-[hsl(var(--muted-foreground))] mb-1 block">{t('welcome.baseUrl')}</label>
-                <input
-                  type="text"
-                  value={config.baseUrl}
-                  onChange={e => config.setBaseUrl(e.target.value)}
-                  className="w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-[hsl(var(--muted-foreground))] mb-1 block">{t('welcome.model')}</label>
-                <input
-                  type="text"
-                  value={config.model}
-                  onChange={e => config.setModel(e.target.value)}
-                  className="w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
-                  placeholder={config.provider === 'ollama' ? 'qwen3.5:9b' : ''}
-                />
-              </div>
-            </>
-          )}
         </div>
 
-        <button
-          onClick={handleStart}
-          disabled={!canStart}
-          className="w-full py-3 rounded-xl bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-30"
-        >
-          {t('welcome.start')}
-        </button>
+        <div className="space-y-2">
+          <button
+            onClick={handleStart}
+            disabled={!canStart}
+            className="w-full py-3 rounded-xl bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-30"
+          >
+            {t('welcome.start')}
+          </button>
+          <p className="text-[10px] text-center text-[hsl(var(--muted-foreground))]">
+            {locale === 'en'
+              ? 'Model, base URL and other options can be configured in Settings after start.'
+              : '模型、接口地址等选项可在启动后进入 Settings 配置。'}
+          </p>
+        </div>
       </div>
     </div>
   );

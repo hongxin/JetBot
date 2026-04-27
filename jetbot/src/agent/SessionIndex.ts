@@ -93,7 +93,7 @@ export class SessionIndex {
         snippet: truncate(turn.content, 200),
       };
       this.entries.push(entry);
-      try { await put(INDEX_STORE, entry, entry.key); } catch {}
+      try { await put(INDEX_STORE, entry); } catch {}
       count++;
     }
 

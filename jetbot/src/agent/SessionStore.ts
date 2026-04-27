@@ -45,7 +45,7 @@ export class SessionStore {
       ended: false,
     };
     await this.clearTurns('current');
-    await put(SESSION_META_STORE, meta, 'current');
+    await put(SESSION_META_STORE, meta);
   }
 
   async appendTurn(turn: Turn): Promise<void> {
@@ -60,10 +60,10 @@ export class SessionStore {
       turnIndex: idx,
       turnJson: JSON.stringify(turn),
     };
-    await put(SESSION_TURN_STORE, stored, stored.id);
+    await put(SESSION_TURN_STORE, stored);
 
     meta.turnCount = idx + 1;
-    await put(SESSION_META_STORE, meta, 'current');
+    await put(SESSION_META_STORE, meta);
   }
 
   async hasCrashedSession(): Promise<boolean> {
@@ -103,7 +103,7 @@ export class SessionStore {
     const archiveId = `archived-${ts}-${hash}`;
 
     meta.id = archiveId;
-    await put(SESSION_META_STORE, meta, archiveId);
+    await put(SESSION_META_STORE, meta);
 
     const turns = await this.recoverTurns();
     for (let i = 0; i < turns.length; i++) {
@@ -113,7 +113,7 @@ export class SessionStore {
         turnIndex: i,
         turnJson: JSON.stringify(turns[i]),
       };
-      await put(SESSION_TURN_STORE, st, st.id);
+      await put(SESSION_TURN_STORE, st);
     }
 
     await this.clearTurns('current');
