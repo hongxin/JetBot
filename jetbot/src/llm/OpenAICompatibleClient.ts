@@ -118,6 +118,11 @@ export class OpenAICompatibleClient implements LLMClient {
     }
 
     if (onStream && body.stream) {
+      if (!response.body) {
+        log.error('response.body is null — falling back to non-stream');
+        const json = await response.json();
+        return this.parseResponse(json);
+      }
       return this.handleStream(response, onStream, onReasoningStream, controller.signal);
     }
 
@@ -148,6 +153,16 @@ export class OpenAICompatibleClient implements LLMClient {
   }
 
   private async handleStream(response: Response, onStream: (chunk: string) => void, onReasoningStream?: (chunk: string) => void, _signal?: AbortSignal): Promise<CompletionResponse> {
+    // Safety net: wrap everything so a stream crash doesn't hang the Promise
+    try {
+      return await this._handleStream(response, onStream, onReasoningStream, _signal);
+    } catch (err: any) {
+      log.error('stream fatal error', { message: err.message, stack: err.stack?.slice(0, 300) });
+      throw err;
+    }
+  }
+
+  private async _handleStream(response: Response, onStream: (chunk: string) => void, onReasoningStream?: (chunk: string) => void, _signal?: AbortSignal): Promise<CompletionResponse> {
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -168,6 +183,7 @@ export class OpenAICompatibleClient implements LLMClient {
       ]);
     };
 
+    log.debug('stream started');
     try {
       while (true) {
         let readResult: ReadableStreamReadResult<Uint8Array>;
@@ -175,9 +191,9 @@ export class OpenAICompatibleClient implements LLMClient {
           readResult = await readWithTimeout();
         } catch (err: any) {
           if (err.message === 'stream_idle_timeout') {
-            log.warn('stream idle timeout — aborting read', { chunks: contentChunks.length });
+            log.warn('stream idle timeout — aborting read', { chunks: contentChunks.length, reasoningChunks: reasoningChunks.length });
           } else {
-            log.warn('stream read interrupted', { error: err.message, chunks: contentChunks.length });
+            log.warn('stream read interrupted', { error: err.message, chunks: contentChunks.length, reasoningChunks: reasoningChunks.length });
           }
           reader.cancel().catch(() => {});
           break;
