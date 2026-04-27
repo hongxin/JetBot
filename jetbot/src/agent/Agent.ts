@@ -1,5 +1,5 @@
 import type { LLMClient } from '../types/llm';
-import type { AgentEvent } from '../types/message';
+import type { AgentEvent, Turn } from '../types/message';
 import { ContextManager } from './ContextManager';
 import { SystemPromptBuilder } from './SystemPromptBuilder';
 import { AgenticLoop, type LoopStats } from './AgenticLoop';
@@ -7,6 +7,10 @@ import { ToolRegistry } from '../tools/ToolRegistry';
 import { PermissionManager } from '../tools/Permission';
 import { PlanMode } from '../plan/PlanMode';
 import { SkillRegistry } from '../skills/SkillRegistry';
+import { SessionStore } from './SessionStore';
+import { SessionIndex } from './SessionIndex';
+import { MemoryStore } from './MemoryStore';
+import { shouldDistill, distillFromMessages, type DistillProposal } from './SkillDistiller';
 import { Scheduler } from '../scheduler/Scheduler';
 import type { HeartbeatConfig } from '../scheduler/types';
 import { detectRuntime } from '../env/RuntimeDetector';
@@ -47,6 +51,10 @@ export class Agent {
   private runtime: RuntimeProfile;
   private onInjectCallback: InjectionCallback | null = null;
   private soulReady: Promise<void>;
+  private sessionStore: SessionStore;
+  private sessionIndex: SessionIndex;
+  private memoryStore: MemoryStore;
+  private itersSinceDistill = 0;
 
   constructor(config: AgentConfig) {
     this.llm = config.llm;
@@ -70,12 +78,25 @@ export class Agent {
 
     this.planMode = new PlanMode();
     this.skills = new SkillRegistry();
+    this.sessionStore = new SessionStore();
+    this.sessionIndex = new SessionIndex();
+    this.memoryStore = new MemoryStore();
     this.onEvent = config.onEvent;
     this.onInjectCallback = config.onInject ?? null;
 
     this.scheduler = new Scheduler((prompt, taskId) => this.injectMessage(prompt, taskId === '__heartbeat__' ? 'heartbeat' : 'scheduler'));
     // Scheduler methods internally await ready, so no race condition even if init is still in progress
     this.scheduler.init().then(() => this.scheduler.start()).catch(err => log.error('scheduler init failed', { error: err.message }));
+
+    // Listen for distill card save/discard events
+    document.addEventListener('jetbot:distill:save', ((e: CustomEvent) => {
+      const { msgId, proposal } = e.detail as { msgId: string; proposal: DistillProposal };
+      this.skills.addSkill(proposal.name, proposal.description, proposal.triggers, proposal.tools, proposal.instructions);
+      import('../store/chatStore').then(m => m.useChatStore.getState().resolveDistillProposal(msgId, true));
+    }) as EventListener);
+    document.addEventListener('jetbot:distill:discard', ((e: CustomEvent) => {
+      import('../store/chatStore').then(m => m.useChatStore.getState().resolveDistillProposal((e.detail as { msgId: string }).msgId, false));
+    }) as EventListener);
 
     // Load soul file (jetbot.md) from VirtualFS — awaited in handle() before first LLM call
     this.soulReady = this.promptBuilder.loadSoulFile(this.tools.fs).catch(err =>
@@ -110,6 +131,26 @@ export class Agent {
     // Ensure soul file is loaded before first LLM call
     await this.soulReady;
 
+    // Session lifecycle — first turn only
+    if (this.context.turnCount() === 0) {
+      await this.sessionStore.ready();
+      await this.sessionIndex.ready();
+      await this.memoryStore.ready();
+      await this.skills.ready();
+      await this.sessionStore.start('browser', this.llm.model());
+
+      // Inject memory context
+      const memoryCtx = this.memoryStore.recentContext(2000);
+      this.promptBuilder.setMemoryContext(memoryCtx);
+
+      // Cross-session recall
+      const recall = this.sessionIndex.recallContext(input, 1500);
+      this.promptBuilder.setSessionRecall(recall);
+    }
+
+    // Adapt context budget for current model
+    this.context.adaptForModel(this.llm.model());
+
     this.context.addUserMessage(input);
 
     // Build system prompt with plan mode and active skill
@@ -133,6 +174,21 @@ export class Agent {
         (chunk) => this.onEvent({ type: 'llm:chunk', data: { chunk }, timestamp: Date.now() }),
       );
       log.info('handle done', { iterations: stats.iterations, toolCalls: stats.toolCalls, tokens: stats.totalTokens, duration: stats.duration });
+
+      // Persist last 2 turns to SessionStore
+      const turns = this.context.turnsRef();
+      const newTurns = turns.slice(-2);
+      for (const t of newTurns) {
+        this.sessionStore.appendTurn(t).catch(() => {});
+      }
+
+      // Distillation check
+      this.itersSinceDistill++;
+      if (this.itersSinceDistill >= 8 && stats && shouldDistill(input, stats.toolCalls, stats.toolCalls)) {
+        this.itersSinceDistill = 0;
+        this.tryDistill(input, finalResponse, turns).catch(() => {});
+      }
+
       return { response: finalResponse, stats };
     } finally {
       this.running = false;
@@ -232,6 +288,10 @@ export class Agent {
         return { response: `${t('cmd.advanced_to')}: ${this.planMode.currentPhase()}` };
       case '/schedule':
         return this.handleScheduleCommand(args);
+      case '/sessions':
+        return this.handleSessionsCommand(args);
+      case '/memory':
+        return this.handleMemoryCommand(args);
       case '/skill':
         return this.handleSkillCommand(args);
       case '/export':
@@ -409,9 +469,132 @@ export class Agent {
     this.loop.abort();
   }
 
+  private async tryDistill(userInput: string, response: string, turns: readonly Turn[]): Promise<void> {
+    const proposal = await distillFromMessages(this.llm, userInput, response, turns);
+    if (!proposal) return;
+
+    // Dedup check
+    const similar = this.skills.findSimilar(proposal.name, proposal.triggers, proposal.description);
+    if (similar) {
+      log.info('distill skipped — similar skill exists', { candidate: proposal.name, similar: similar.name, score: similar.score });
+      return;
+    }
+
+    // Show proposal in chat
+    const chatStore = (await import('../store/chatStore')).useChatStore;
+    chatStore.getState().addDistillProposal(proposal);
+  }
+
+  async recoverCrashedSession(): Promise<void> {
+    const turns = await this.sessionStore.recoverTurns();
+    for (const t of turns) {
+      // Use internal pushTurn via reflection or call addUserMessage/addAssistantMessage
+      // For simplicity, we restore directly into context
+      if (t.role === 'user') {
+        this.context.addUserMessage(t.content.map(c => c.type === 'text' ? c.text : '').join(''));
+      }
+    }
+    await this.sessionStore.start('browser', this.llm.model());
+    for (const t of turns) {
+      await this.sessionStore.appendTurn(t);
+    }
+  }
+
+  async discardCrashedSession(): Promise<void> {
+    await this.sessionStore.start('browser', this.llm.model());
+  }
+
+  private async handleSessionsCommand(args: string[]): Promise<{ response: string }> {
+    const sub = args[0];
+    const rest = args.slice(1).join(' ');
+
+    switch (sub) {
+      case 'list': case '': {
+        const archived = await this.sessionStore.listArchived();
+        if (archived.length === 0) return { response: t('sessions.empty') };
+        const lines = archived.slice(0, 20).map(s =>
+          `- **${s.id.slice(0, 16)}** | ${s.provider}:${s.model} | ${new Date(s.startedAt).toLocaleString()} | ${s.turnCount} turns`
+        );
+        if (archived.length > 20) lines.push(`... and ${archived.length - 20} more`);
+        return { response: `${t('sessions.list')}:\n${lines.join('\n')}` };
+      }
+      case 'search': {
+        if (!rest) return { response: t('sessions.searchUsage') };
+        const results = this.sessionIndex.search(rest, 10);
+        if (results.length === 0) return { response: t('sessions.noResults') + ': ' + rest };
+        const lines = results.map(r =>
+          `- [${r.sessionId.slice(0, 12)} turn#${r.turnIndex}] (${r.role}): ${r.snippet}`
+        );
+        return { response: `${t('sessions.search')} "${rest}":\n${lines.join('\n')}` };
+      }
+      case 'recall': {
+        if (!rest) return { response: t('sessions.recallUsage') };
+        const recall = this.sessionIndex.recallContext(rest, 1500);
+        if (!recall) return { response: t('sessions.noResults') + ': ' + rest };
+        return { response: recall };
+      }
+      case 'prune': {
+        const days = parseInt(rest, 10) || 30;
+        const pruned = await this.sessionStore.pruneArchived(days);
+        return { response: `${t('sessions.pruned')}: ${pruned} (${days}d)` };
+      }
+      default:
+        return { response: t('sessions.usage') };
+    }
+  }
+
+  private handleMemoryCommand(args: string[]): { response: string } {
+    const sub = args[0];
+    const rest = args.slice(1).join(' ');
+
+    switch (sub) {
+      case 'list': case '': {
+        const entries = this.memoryStore.list();
+        if (entries.length === 0) return { response: t('memory.empty') };
+        const lines = entries.map(e =>
+          `- **#${e.id}** [${e.category}] ${e.timestamp.slice(0, 16)}: ${e.content}`
+        );
+        return { response: `${t('memory.list')} (${entries.length}):\n${lines.join('\n')}` };
+      }
+      case 'add': {
+        if (!rest) return { response: t('memory.addUsage') };
+        const categories: Array<'preference' | 'project' | 'decision' | 'fact'> = ['preference', 'project', 'decision', 'fact'];
+        let category: 'preference' | 'project' | 'decision' | 'fact' = 'fact';
+        let content = rest;
+        const firstSpace = rest.indexOf(' ');
+        if (firstSpace > 0) {
+          const firstWord = rest.slice(0, firstSpace);
+          if ((categories as string[]).includes(firstWord)) {
+            category = firstWord as typeof category;
+            content = rest.slice(firstSpace + 1);
+          }
+        }
+        this.memoryStore.add(category, content).catch(() => {});
+        const memCtx = this.memoryStore.recentContext(2000);
+        this.promptBuilder.setMemoryContext(memCtx);
+        return { response: `${t('memory.added')}: [${category}] ${content}` };
+      }
+      case 'remove': {
+        const id = parseInt(args[1], 10);
+        if (isNaN(id)) return { response: t('memory.removeUsage') };
+        this.memoryStore.remove(id).catch(() => {});
+        return { response: t('memory.removed') };
+      }
+      case 'clear': {
+        this.memoryStore.clear().catch(() => {});
+        this.promptBuilder.setMemoryContext('');
+        return { response: t('memory.cleared') };
+      }
+      default:
+        return { response: t('memory.usage') };
+    }
+  }
+
   destroy(): void {
     this.abort();
     this.scheduler.stop();
+    this.skills.saveAll().catch(() => {});
+    this.sessionStore.end().catch(() => {});
   }
 
   getScheduler(): Scheduler {
