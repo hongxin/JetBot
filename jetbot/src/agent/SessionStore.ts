@@ -1,13 +1,11 @@
 // src/agent/SessionStore.ts — Session persistence in IndexedDB with crash recovery
 
-import { ensureStore, put, get, getAll, del } from '../lib/db';
+import { initDB, put, get, getAll, del as dbDel } from '../lib/db';
 import type { Turn } from '../types/message';
 import { logger } from '../lib/logger';
 
-const DB_NAME = 'jetbot';
 const SESSION_META_STORE = 'session_meta';
 const SESSION_TURN_STORE = 'session_turns';
-const DB_VERSION = 2;
 
 const log = logger.module('session');
 
@@ -31,10 +29,7 @@ export class SessionStore {
   private dbReady: Promise<void>;
 
   constructor() {
-    this.dbReady = Promise.all([
-      ensureStore(DB_NAME, DB_VERSION, SESSION_META_STORE, 'id'),
-      ensureStore(DB_NAME, DB_VERSION, SESSION_TURN_STORE, 'id'),
-    ]).then(() => {});
+    this.dbReady = initDB();
   }
 
   async ready(): Promise<void> { return this.dbReady; }
@@ -50,12 +45,12 @@ export class SessionStore {
       ended: false,
     };
     await this.clearTurns('current');
-    await put(DB_NAME, SESSION_META_STORE, meta, 'current');
+    await put(SESSION_META_STORE, meta, 'current');
   }
 
   async appendTurn(turn: Turn): Promise<void> {
     await this.dbReady;
-    const meta = await get<SessionMeta>(DB_NAME, SESSION_META_STORE, 'current');
+    const meta = await get<SessionMeta>(SESSION_META_STORE, 'current');
     if (!meta || meta.ended) return;
 
     const idx = meta.turnCount;
@@ -65,28 +60,28 @@ export class SessionStore {
       turnIndex: idx,
       turnJson: JSON.stringify(turn),
     };
-    await put(DB_NAME, SESSION_TURN_STORE, stored, stored.id);
+    await put(SESSION_TURN_STORE, stored, stored.id);
 
     meta.turnCount = idx + 1;
-    await put(DB_NAME, SESSION_META_STORE, meta, 'current');
+    await put(SESSION_META_STORE, meta, 'current');
   }
 
   async hasCrashedSession(): Promise<boolean> {
     await this.dbReady;
-    const meta = await get<SessionMeta>(DB_NAME, SESSION_META_STORE, 'current');
+    const meta = await get<SessionMeta>(SESSION_META_STORE, 'current');
     return !!(meta && !meta.ended && meta.turnCount > 0);
   }
 
   async getCrashedMeta(): Promise<SessionMeta | null> {
     await this.dbReady;
-    const meta = await get<SessionMeta>(DB_NAME, SESSION_META_STORE, 'current');
+    const meta = await get<SessionMeta>(SESSION_META_STORE, 'current');
     if (meta && !meta.ended && meta.turnCount > 0) return meta;
     return null;
   }
 
   async recoverTurns(): Promise<Turn[]> {
     await this.dbReady;
-    const turns = await getAll<StoredTurn>(DB_NAME, SESSION_TURN_STORE);
+    const turns = await getAll<StoredTurn>(SESSION_TURN_STORE);
     return turns
       .filter(t => t.sessionId === 'current')
       .sort((a, b) => a.turnIndex - b.turnIndex)
@@ -99,7 +94,7 @@ export class SessionStore {
 
   async end(): Promise<void> {
     await this.dbReady;
-    const meta = await get<SessionMeta>(DB_NAME, SESSION_META_STORE, 'current');
+    const meta = await get<SessionMeta>(SESSION_META_STORE, 'current');
     if (!meta) return;
     meta.ended = true;
 
@@ -108,7 +103,7 @@ export class SessionStore {
     const archiveId = `archived-${ts}-${hash}`;
 
     meta.id = archiveId;
-    await put(DB_NAME, SESSION_META_STORE, meta, archiveId);
+    await put(SESSION_META_STORE, meta, archiveId);
 
     const turns = await this.recoverTurns();
     for (let i = 0; i < turns.length; i++) {
@@ -118,18 +113,18 @@ export class SessionStore {
         turnIndex: i,
         turnJson: JSON.stringify(turns[i]),
       };
-      await put(DB_NAME, SESSION_TURN_STORE, st, st.id);
+      await put(SESSION_TURN_STORE, st, st.id);
     }
 
     await this.clearTurns('current');
-    await del(DB_NAME, SESSION_META_STORE, 'current');
+    await dbDel(SESSION_META_STORE, 'current');
 
     log.info('session archived', { id: archiveId, turns: turns.length });
   }
 
   async listArchived(): Promise<SessionMeta[]> {
     await this.dbReady;
-    const all = await getAll<SessionMeta>(DB_NAME, SESSION_META_STORE);
+    const all = await getAll<SessionMeta>(SESSION_META_STORE);
     return all
       .filter(m => m.id !== 'current')
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
@@ -137,7 +132,7 @@ export class SessionStore {
 
   async readArchived(sessionId: string): Promise<Turn[]> {
     await this.dbReady;
-    const all = await getAll<StoredTurn>(DB_NAME, SESSION_TURN_STORE);
+    const all = await getAll<StoredTurn>(SESSION_TURN_STORE);
     return all
       .filter(t => t.sessionId === sessionId)
       .sort((a, b) => a.turnIndex - b.turnIndex)
@@ -155,10 +150,10 @@ export class SessionStore {
     let count = 0;
     for (const m of archived) {
       if (new Date(m.startedAt).getTime() < cutoff) {
-        await del(DB_NAME, SESSION_META_STORE, m.id);
-        const allTurns = await getAll<StoredTurn>(DB_NAME, SESSION_TURN_STORE);
+        await dbDel(SESSION_META_STORE, m.id);
+        const allTurns = await getAll<StoredTurn>(SESSION_TURN_STORE);
         for (const t of allTurns) {
-          if (t.sessionId === m.id) await del(DB_NAME, SESSION_TURN_STORE, t.id);
+          if (t.sessionId === m.id) await dbDel(SESSION_TURN_STORE, t.id);
         }
         count++;
       }
@@ -167,9 +162,9 @@ export class SessionStore {
   }
 
   private async clearTurns(sessionId: string): Promise<void> {
-    const all = await getAll<StoredTurn>(DB_NAME, SESSION_TURN_STORE);
+    const all = await getAll<StoredTurn>(SESSION_TURN_STORE);
     for (const t of all) {
-      if (t.sessionId === sessionId) await del(DB_NAME, SESSION_TURN_STORE, t.id);
+      if (t.sessionId === sessionId) await dbDel(SESSION_TURN_STORE, t.id);
     }
   }
 

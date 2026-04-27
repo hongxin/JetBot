@@ -1,11 +1,9 @@
 // src/agent/MemoryStore.ts — Persistent memory store in IndexedDB
 
-import { ensureStore, put, getAll, del, clearStore } from '../lib/db';
+import { initDB, put, getAll, del as dbDel, clearStore } from '../lib/db';
 import { logger } from '../lib/logger';
 
-const DB_NAME = 'jetbot';
 const STORE_NAME = 'memory';
-const DB_VERSION = 2;
 
 const log = logger.module('memory');
 
@@ -24,15 +22,14 @@ export class MemoryStore {
   private dbReady: Promise<void>;
 
   constructor() {
-    this.dbReady = ensureStore(DB_NAME, DB_VERSION, STORE_NAME, 'id')
-      .then(() => this.loadFromDB());
+    this.dbReady = initDB().then(() => this.loadFromDB());
   }
 
   async ready(): Promise<void> { return this.dbReady; }
 
   private async loadFromDB(): Promise<void> {
     try {
-      const rows = await getAll<MemoryEntry>(DB_NAME, STORE_NAME);
+      const rows = await getAll<MemoryEntry>(STORE_NAME);
       this.entries = rows;
       this.nextId = this.entries.length > 0
         ? Math.max(...this.entries.map(e => e.id)) + 1
@@ -50,7 +47,7 @@ export class MemoryStore {
       content,
     };
     this.entries.push(entry);
-    try { await put(DB_NAME, STORE_NAME, entry, String(entry.id)); } catch {}
+    try { await put(STORE_NAME, entry, String(entry.id)); } catch {}
     return entry;
   }
 
@@ -59,14 +56,14 @@ export class MemoryStore {
     const idx = this.entries.findIndex(e => e.id === id);
     if (idx === -1) return false;
     this.entries.splice(idx, 1);
-    try { await del(DB_NAME, STORE_NAME, String(id)); } catch {}
+    try { await dbDel(STORE_NAME, String(id)); } catch {}
     return true;
   }
 
   async clear(): Promise<void> {
     await this.dbReady;
     this.entries = [];
-    try { await clearStore(DB_NAME, STORE_NAME); } catch {}
+    try { await clearStore(STORE_NAME); } catch {}
   }
 
   list(): MemoryEntry[] {

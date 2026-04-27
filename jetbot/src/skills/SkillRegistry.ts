@@ -1,11 +1,9 @@
 import type { Skill, LifecycleStage } from './types';
 import { builtinSkills } from './builtins';
 import { logger } from '../lib/logger';
-import { ensureStore, put, getAll } from '../lib/db';
+import { initDB, put, getAll, del as dbDel } from '../lib/db';
 
-const DB_NAME = 'jetbot';
 const STORE_NAME = 'skills';
-const DB_VERSION = 2;
 
 const log = logger.module('skills');
 
@@ -60,10 +58,9 @@ export class SkillRegistry {
   private dbReady: Promise<void>;
 
   constructor() {
-    this.dbReady = ensureStore(DB_NAME, DB_VERSION, STORE_NAME, 'name')
+    this.dbReady = initDB()
       .then(() => this.loadFromDB())
       .then(() => {
-        // Seed builtins into DB if missing
         for (const skill of builtinSkills) {
           if (!this.skills.has(skill.name)) {
             const seeded: Skill = {
@@ -87,7 +84,7 @@ export class SkillRegistry {
 
   private async loadFromDB(): Promise<void> {
     try {
-      const rows = await getAll<Skill>(DB_NAME, STORE_NAME);
+      const rows = await getAll<Skill>(STORE_NAME);
       for (const row of rows) {
         this.skills.set(row.name, row);
       }
@@ -98,7 +95,7 @@ export class SkillRegistry {
   }
 
   private async persistSkill(skill: Skill): Promise<void> {
-    try { await put(DB_NAME, STORE_NAME, skill, skill.name); } catch {}
+    try { await put(STORE_NAME, skill, skill.name); } catch {}
   }
 
   async ready(): Promise<void> { return this.dbReady; }
@@ -136,7 +133,6 @@ export class SkillRegistry {
 
   get(name: string): Skill | undefined { return this.skills.get(name); }
 
-  /** Add a new (distilled or imported) skill */
   addSkill(name: string, description: string, triggers: string[], tools: string[], instructions: string): Skill {
     const skill: Skill = {
       name, description,
@@ -157,7 +153,6 @@ export class SkillRegistry {
     return skill;
   }
 
-  /** Jaccard-based similarity check */
   findSimilar(candidateName: string, candidateTriggers: string[], candidateDesc: string): { name: string; score: number } | null {
     const candWords = new Set([
       ...tokenizeForSimilarity(candidateName),
@@ -192,7 +187,6 @@ export class SkillRegistry {
     return best;
   }
 
-  /** Export a skill as a SKILL.md string */
   exportSkill(name: string): string | null {
     const skill = this.skills.get(name);
     if (!skill) return null;
@@ -210,7 +204,6 @@ export class SkillRegistry {
     ].join('\n');
   }
 
-  /** Import a skill from SKILL.md content */
   importSkill(content: string): Skill | null {
     const lines = content.split('\n');
     const fm: Record<string, string> = {};
@@ -262,27 +255,23 @@ export class SkillRegistry {
     }));
   }
 
-  /** Save all skills to DB (call at session end) */
   async saveAll(): Promise<void> {
     for (const skill of this.skills.values()) {
-      try { await put(DB_NAME, STORE_NAME, skill, skill.name); } catch {}
+      try { await put(STORE_NAME, skill, skill.name); } catch {}
     }
   }
 
-  /** Delete a skill (non-builtin only) */
   remove(name: string): boolean {
     const s = this.skills.get(name);
     if (!s || s.originManual) return false;
     this.skills.delete(name);
     if (this.activeSkill === name) this.activeSkill = null;
-    import('../lib/db').then(m => m.del('jetbot', STORE_NAME, name)).catch(() => {});
+    dbDel(STORE_NAME, name).catch(() => {});
     return true;
   }
 
-  /** Count */
   countAll(): number { return this.skills.size; }
 
-  /** Usage stats for /status */
   usageStats(name: string): { useCount: number; qualityScore: number; stage: LifecycleStage } | null {
     const s = this.skills.get(name);
     if (!s) return null;

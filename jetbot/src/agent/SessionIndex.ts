@@ -1,11 +1,9 @@
 // src/agent/SessionIndex.ts — Pure-JS inverted index with TF-IDF scoring
 
-import { ensureStore, put, getAll, del } from '../lib/db';
+import { initDB, put, getAll, del as dbDel } from '../lib/db';
 import { logger } from '../lib/logger';
 
-const DB_NAME = 'jetbot';
 const INDEX_STORE = 'session_index';
-const DB_VERSION = 2;
 
 const log = logger.module('search');
 
@@ -43,15 +41,14 @@ export class SessionIndex {
   private dbReady: Promise<void>;
 
   constructor() {
-    this.dbReady = ensureStore(DB_NAME, DB_VERSION, INDEX_STORE, 'key')
-      .then(() => this.loadFromDB());
+    this.dbReady = initDB().then(() => this.loadFromDB());
   }
 
   async ready(): Promise<void> { return this.dbReady; }
 
   private async loadFromDB(): Promise<void> {
     try {
-      this.entries = await getAll<IndexEntry>(DB_NAME, INDEX_STORE);
+      this.entries = await getAll<IndexEntry>(INDEX_STORE);
       this.rebuildInverted();
       log.debug('search index loaded', { entries: this.entries.length });
     } catch {}
@@ -80,9 +77,9 @@ export class SessionIndex {
     await this.dbReady;
 
     this.entries = this.entries.filter(e => e.sessionId !== sessionId);
-    const allDb = await getAll<IndexEntry>(DB_NAME, INDEX_STORE);
+    const allDb = await getAll<IndexEntry>(INDEX_STORE);
     for (const e of allDb) {
-      if (e.sessionId === sessionId) await del(DB_NAME, INDEX_STORE, e.key);
+      if (e.sessionId === sessionId) await dbDel(INDEX_STORE, e.key);
     }
 
     let count = 0;
@@ -96,7 +93,7 @@ export class SessionIndex {
         snippet: truncate(turn.content, 200),
       };
       this.entries.push(entry);
-      try { await put(DB_NAME, INDEX_STORE, entry, entry.key); } catch {}
+      try { await put(INDEX_STORE, entry, entry.key); } catch {}
       count++;
     }
 
