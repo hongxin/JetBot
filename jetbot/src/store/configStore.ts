@@ -78,7 +78,9 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
   apiKey: saved.apiKey || '',
   model: saved.model || 'gpt-4o',
   baseUrl: saved.baseUrl || 'https://api.openai.com/v1',
-  proxyUrl: saved.proxyUrl || '',
+  // Default: use current origin as CORS proxy (Vite dev server provides /proxy endpoint).
+  // When no proxy is saved, auto-use window.location.origin so browser→proxy→API works.
+  proxyUrl: saved.proxyUrl || (typeof window !== 'undefined' ? window.location.origin : ''),
   locale: initLocale,
   thinkingMode: (saved.thinkingMode as ThinkingMode) || 'non-thinking',
 
