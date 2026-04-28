@@ -101,7 +101,11 @@ export class AgenticLoop {
           this.emit(onEvent, 'circuit_breaker', { fatalFailures, recoverableFailures });
           return this.result(`Circuit breaker: ${fatalFailures} consecutive fatal failures. Last error: ${err.message}`, iterations, totalToolCalls, totalTokens, startTime);
         }
-        context.addAssistantMessage(`Error calling LLM: ${err.message}`);
+        // Don't add assistant messages for API validation errors — they pollute context
+        // and make retries worse. Circuit breaker will handle it if persistent.
+        if (!(err.message.includes('Invalid assistant message') || err.message.includes('invalid_request_error'))) {
+          context.addAssistantMessage(`Error calling LLM: ${err.message}`);
+        }
         continue;
       }
 

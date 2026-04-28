@@ -66,7 +66,12 @@ export class ContextManager {
   addAssistantMessage(text: string, reasoningContent?: string, toolCalls?: Array<{ id: string; name: string; arguments: string }>): void {
     const parts: ContentPart[] = [];
     if (reasoningContent) parts.push({ type: 'reasoning', text: reasoningContent });
+    // Guard: assistant message must have content or tool_calls for API validity.
+    // When the LLM returns only reasoning with no text and no tool calls, insert
+    // a minimal placeholder so toMessages() never emits an invalid message.
+    const hasContent = text || (toolCalls && toolCalls.length > 0);
     if (text) parts.push({ type: 'text', text });
+    if (!hasContent) parts.push({ type: 'text', text: ' ' });
     if (toolCalls) {
       for (const tc of toolCalls) {
         parts.push({ type: 'tool_call', id: tc.id, name: tc.name, arguments: tc.arguments });
@@ -130,6 +135,11 @@ export class ContextManager {
         if (textParts.length) msg.content = textParts.join('');
         if (reasoningParts.length) msg.reasoning_content = reasoningParts.join('');
         if (tcParts.length) msg.tool_calls = tcParts;
+        // Defense in depth: API rejects assistant messages with neither content nor tool_calls.
+        // If a malformed turn slipped through, patch it rather than poison the request.
+        if (!msg.content && !msg.tool_calls) {
+          msg.content = ' ';
+        }
         msgs.push(msg);
       } else if (turn.role === 'tool') {
         const result = turn.content[0] as any;
