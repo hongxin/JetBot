@@ -78,9 +78,12 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
   apiKey: saved.apiKey || '',
   model: saved.model || 'gpt-4o',
   baseUrl: saved.baseUrl || 'https://api.openai.com/v1',
-  // Default: use current origin as CORS proxy (Vite dev server provides /proxy endpoint).
-  // When no proxy is saved, auto-use window.location.origin so browser→proxy→API works.
-  proxyUrl: (saved.proxyUrl ?? (typeof window !== 'undefined' ? window.location.origin : '')).trim(),
+  // Default proxy: only in dev, where the Vite dev server provides a /proxy
+  // endpoint. In production (e.g. GitHub Pages static hosting) there is no
+  // such endpoint — defaulting to origin would POST to a static host and get
+  // 405. Production defaults to empty (direct API call); users needing a
+  // proxy set it explicitly in Settings.
+  proxyUrl: (saved.proxyUrl ?? (import.meta.env.DEV && typeof window !== 'undefined' ? window.location.origin : '')).trim(),
   locale: initLocale,
   thinkingMode: (saved.thinkingMode as ThinkingMode) || 'non-thinking',
 
