@@ -91,7 +91,13 @@ Activate via `/skill <name>` to inject domain expertise into the system prompt:
 
 ### Cosmos View
 
-Conversations rendered as a force-directed starfield canvas. User messages, AI replies, and tool calls appear as cosmic bubble nodes; consecutive turns automatically link into constellation clusters. Drag-connect any two nodes to trigger an LLM relationship analysis.
+Conversations rendered as a force-directed starfield canvas — and beyond. Five node kinds coexist on a single graph:
+
+- **user / assistant / tool** — the conversation flow
+- **memory** (teal droplet) — facts/decisions saved to the persistent MemoryStore
+- **skill** (amber hexagon) — capabilities distilled from a session and crystallized into SKILL.md
+
+Memory and skill nodes attach via dashed *derives* edges back to the assistant turn that produced them, making it visible at a glance "what this conversation left behind." Node detail cards are resizable on eight handles and scroll long markdown internally. Drag-connect any two nodes to trigger an LLM relationship analysis.
 
 ### Permission System
 
@@ -99,10 +105,14 @@ Three-tier access control: **safe** (auto-approve), **risky** (approve once, the
 
 ### Additional Capabilities
 
+- **Session Persistence** — Every turn is incrementally written to IndexedDB; crashed sessions can be recovered; previous sessions are searchable and recallable as long-term context (`/sessions`)
+- **Memory Store** — Persistent facts, preferences, decisions injected into the system prompt across sessions (`/memory add|list|remove|clear`)
+- **Skill Lifecycle** — Distilled skills carry quality score, use count, and a stage (new / active / stable / stale / deprecated); a Skills Panel in Settings manages activation, import (paste SKILL.md), and export
+- **Auto-Distillation** — After a tool-heavy turn with good success rate, the agent proposes a reusable skill via a DistillCard; one click saves it
 - **File Bridge** — Drag-and-drop local file import; `export_file` triggers browser download
 - **Scheduler** — In-browser scheduled tasks (interval / cron / once), persisted in IndexedDB
 - **Bilingual i18n** — English and Chinese UI, switchable in settings
-- **Runtime Detection** — Auto-detects 19 browser capabilities; tools load dynamically
+- **Runtime Detection** — Auto-detects browser capabilities; tools load dynamically based on what's available
 
 ## Commands
 
@@ -115,7 +125,9 @@ Three-tier access control: **safe** (auto-approve), **risky** (approve once, the
 | `/runtime` | Show runtime environment and capabilities |
 | `/plan <goal>` | Enter or exit plan mode |
 | `/next` | Advance to next plan phase |
-| `/skill <name>\|list\|off` | Activate, list, or deactivate skills |
+| `/skill <name>\|list\|off\|status\|delete\|export` | Manage skills (activate, list, lifecycle status, delete, export SKILL.md) |
+| `/memory list\|add\|remove\|clear` | Manage persistent memory entries |
+| `/sessions list\|search\|recall\|prune` | Browse archived sessions, search across them, prune by age |
 | `/export <path>` | Download a file from VirtualFS |
 | `/schedule` | Manage scheduled tasks |
 | `/auto on\|off` | Toggle autonomous mode |
