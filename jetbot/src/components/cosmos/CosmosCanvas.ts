@@ -29,7 +29,7 @@ interface EdgeParticle {
 // --- Constants ---
 
 const PARALLAX = [0.1, 0.3, 0.6];
-const MAX_PARTICLES = 50;
+const PARTICLES_PER_EDGE = 3;
 
 // Force simulation parameters
 const REPULSION = 6000;
@@ -117,13 +117,12 @@ export class CosmosCanvas {
     this.edges = edges;
     this.simCooled = false; // new edge → reheat
 
-    // Sync particles
+    // Sync particles — every edge gets particles
     for (const e of edges) {
       const existing = this.particles.filter((p) => p.edgeId === e.id);
-      if (existing.length === 0 && this.particles.length < MAX_PARTICLES) {
-        const count = Math.min(4, MAX_PARTICLES - this.particles.length);
-        for (let i = 0; i < count; i++) {
-          this.particles.push({ edgeId: e.id, t: i / count });
+      if (existing.length === 0) {
+        for (let i = 0; i < PARTICLES_PER_EDGE; i++) {
+          this.particles.push({ edgeId: e.id, t: i / PARTICLES_PER_EDGE });
         }
       }
     }

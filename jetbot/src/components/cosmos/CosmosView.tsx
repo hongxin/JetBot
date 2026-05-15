@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo, type PointerEvent as RPointerEvent } from 'react';
 import { useCosmosStore } from '../../store/cosmosStore';
 import { CosmosCanvas } from './CosmosCanvas';
 import { InputBar } from '../InputBar';
@@ -288,6 +288,12 @@ export function CosmosView() {
 
 // --- Floating detail card ---
 
+const MIN_CARD_W = 240;
+const MAX_CARD_W = 800;
+const MIN_CARD_H = 120;
+const MAX_CARD_H = 600;
+const DEFAULT_CARD_W = 340;
+
 function NodeCard({
   node,
   x,
@@ -302,31 +308,66 @@ function NodeCard({
   onClose: () => void;
 }) {
   const hue = getNodeHue(node);
-  const cardWidth = 340;
-  const estimatedHeight = node.kind === 'tool' ? 280 : 180;
-  const showBelow = y + 50 + estimatedHeight < containerHeight;
+  const [size, setSize] = useState({ w: DEFAULT_CARD_W, h: node.kind === 'tool' ? 280 : 200 });
+  const resizing = useRef<{ edge: string; startX: number; startY: number; startW: number; startH: number } | null>(null);
+
+  const showBelow = y + 50 + size.h < containerHeight;
 
   const style: React.CSSProperties = {
     position: 'absolute',
-    left: Math.max(8, Math.min(x - cardWidth / 2, window.innerWidth - cardWidth - 8)),
-    top: showBelow ? y + 45 : y - estimatedHeight - 15,
-    width: cardWidth,
+    left: Math.max(8, Math.min(x - size.w / 2, window.innerWidth - size.w - 8)),
+    top: showBelow ? y + 45 : y - size.h - 15,
+    width: size.w,
+    height: size.h,
     borderColor: `hsla(${hue}, 70%, 50%, 0.5)`,
   };
+
+  const onResizeStart = useCallback((edge: string, e: RPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizing.current = { edge, startX: e.clientX, startY: e.clientY, startW: size.w, startH: size.h };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [size]);
+
+  const onResizeMove = useCallback((e: RPointerEvent<HTMLDivElement>) => {
+    if (!resizing.current) return;
+    const { edge, startX, startY, startW, startH } = resizing.current;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    let w = startW, h = startH;
+    if (edge.includes('r')) w = startW + dx;
+    if (edge.includes('l')) w = startW - dx;
+    if (edge.includes('b')) h = startH + dy;
+    if (edge.includes('t')) h = startH - dy;
+    setSize({
+      w: Math.max(MIN_CARD_W, Math.min(MAX_CARD_W, w)),
+      h: Math.max(MIN_CARD_H, Math.min(MAX_CARD_H, h)),
+    });
+  }, []);
+
+  const onResizeEnd = useCallback(() => { resizing.current = null; }, []);
 
   const kindLabel = node.kind === 'user' ? '👤 User' : node.kind === 'assistant' ? '✦ Assistant' : `⚙ ${node.toolName}`;
   const statusIcon = node.status === 'done' ? '✓' : node.status === 'error' ? '✗' : node.status === 'running' ? '⟳' : '';
   const statusColor = node.status === 'done' ? 'text-green-400' : node.status === 'error' ? 'text-red-400' : node.status === 'running' ? 'text-yellow-400' : '';
 
+  // Shared props for resize handles
+  const handleProps = (edge: string, cursor: string, pos: React.CSSProperties) => ({
+    style: { position: 'absolute' as const, cursor, ...pos },
+    onPointerDown: (e: RPointerEvent<HTMLDivElement>) => onResizeStart(edge, e),
+    onPointerMove: onResizeMove,
+    onPointerUp: onResizeEnd,
+  });
+
   return (
     <div
       style={style}
-      className="rounded-lg border bg-[hsl(230,20%,12%)] shadow-xl backdrop-blur-sm z-10 text-sm"
+      className="rounded-lg border bg-[hsl(230,20%,12%)] shadow-xl backdrop-blur-sm z-10 text-sm flex flex-col overflow-hidden"
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 shrink-0">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: `hsl(${hue}, 70%, 50%)` }} />
           <span className="font-medium text-white/90">{kindLabel}</span>
@@ -336,24 +377,37 @@ function NodeCard({
       </div>
 
       {/* Content — tool nodes show raw params+result, others render markdown */}
-      {node.kind === 'tool' ? (
-        <>
-          <div className="px-3 py-2 border-b border-white/5">
-            <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Params</div>
-            <pre className="text-xs font-mono text-white/60 max-h-[120px] overflow-y-auto whitespace-pre-wrap break-all">
-              {JSON.stringify(node.params, null, 2)}
-            </pre>
-          </div>
-          <div className="px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Result</div>
-            <pre className={`text-xs font-mono max-h-[150px] overflow-y-auto whitespace-pre-wrap break-all ${node.isError ? 'text-red-400' : 'text-green-400/80'}`}>
-              {node.content || (node.status === 'running' ? 'Running...' : '—')}
-            </pre>
-          </div>
-        </>
-      ) : (
-        <MarkdownContent content={node.content || '...'} />
-      )}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {node.kind === 'tool' ? (
+          <>
+            <div className="px-3 py-2 border-b border-white/5">
+              <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Params</div>
+              <pre className="text-xs font-mono text-white/60 whitespace-pre-wrap break-all">
+                {JSON.stringify(node.params, null, 2)}
+              </pre>
+            </div>
+            <div className="px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Result</div>
+              <pre className={`text-xs font-mono whitespace-pre-wrap break-all ${node.isError ? 'text-red-400' : 'text-green-400/80'}`}>
+                {node.content || (node.status === 'running' ? 'Running...' : '—')}
+              </pre>
+            </div>
+          </>
+        ) : (
+          <MarkdownContent content={node.content || '...'} />
+        )}
+      </div>
+
+      {/* Resize handles — edges */}
+      <div {...handleProps('r', 'ew-resize', { top: 0, right: -3, bottom: 0, width: 6 })} />
+      <div {...handleProps('l', 'ew-resize', { top: 0, left: -3, bottom: 0, width: 6 })} />
+      <div {...handleProps('b', 'ns-resize', { bottom: -3, left: 0, right: 0, height: 6 })} />
+      <div {...handleProps('t', 'ns-resize', { top: -3, left: 0, right: 0, height: 6 })} />
+      {/* Resize handles — corners */}
+      <div {...handleProps('rb', 'nwse-resize', { bottom: -4, right: -4, width: 10, height: 10 })} />
+      <div {...handleProps('lb', 'nesw-resize', { bottom: -4, left: -4, width: 10, height: 10 })} />
+      <div {...handleProps('rt', 'nesw-resize', { top: -4, right: -4, width: 10, height: 10 })} />
+      <div {...handleProps('lt', 'nwse-resize', { top: -4, left: -4, width: 10, height: 10 })} />
     </div>
   );
 }
@@ -362,7 +416,7 @@ function MarkdownContent({ content }: { content: string }) {
   const html = useMemo(() => marked.parse(content, { async: false }) as string, [content]);
   return (
     <div
-      className="cosmos-md px-3 py-2 text-xs text-white/70 max-h-[250px] overflow-y-auto"
+      className="cosmos-md px-3 py-2 text-xs text-white/70"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
