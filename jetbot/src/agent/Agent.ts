@@ -93,6 +93,10 @@ export class Agent {
       const { msgId, proposal } = e.detail as { msgId: string; proposal: DistillProposal };
       this.skills.addSkill(proposal.name, proposal.description, proposal.triggers, proposal.tools, proposal.instructions);
       import('../store/chatStore').then(m => m.useChatStore.getState().resolveDistillProposal(msgId, true));
+      // Notify Cosmos that a new skill crystallized from this turn (anchor by msgId)
+      document.dispatchEvent(new CustomEvent('jetbot:skill:distilled-accepted', {
+        detail: { proposal, anchorMsgId: msgId },
+      }));
     }) as EventListener);
     document.addEventListener('jetbot:distill:discard', ((e: CustomEvent) => {
       import('../store/chatStore').then(m => m.useChatStore.getState().resolveDistillProposal((e.detail as { msgId: string }).msgId, false));

@@ -294,6 +294,14 @@ const MIN_CARD_H = 120;
 const MAX_CARD_H = 600;
 const DEFAULT_CARD_W = 340;
 
+const DEFAULT_CARD_H: Record<string, number> = {
+  user: 180, assistant: 220, tool: 280, memory: 220, skill: 320,
+};
+
+const MEMORY_CAT_HUE: Record<string, number> = {
+  preference: 30, project: 200, decision: 280, fact: 170,
+};
+
 function NodeCard({
   node,
   x,
@@ -308,7 +316,7 @@ function NodeCard({
   onClose: () => void;
 }) {
   const hue = getNodeHue(node);
-  const [size, setSize] = useState({ w: DEFAULT_CARD_W, h: node.kind === 'tool' ? 280 : 200 });
+  const [size, setSize] = useState({ w: DEFAULT_CARD_W, h: DEFAULT_CARD_H[node.kind] ?? 200 });
   const resizing = useRef<{ edge: string; startX: number; startY: number; startW: number; startH: number } | null>(null);
 
   const showBelow = y + 50 + size.h < containerHeight;
@@ -347,9 +355,22 @@ function NodeCard({
 
   const onResizeEnd = useCallback(() => { resizing.current = null; }, []);
 
-  const kindLabel = node.kind === 'user' ? '👤 User' : node.kind === 'assistant' ? '✦ Assistant' : `⚙ ${node.toolName}`;
-  const statusIcon = node.status === 'done' ? '✓' : node.status === 'error' ? '✗' : node.status === 'running' ? '⟳' : '';
-  const statusColor = node.status === 'done' ? 'text-green-400' : node.status === 'error' ? 'text-red-400' : node.status === 'running' ? 'text-yellow-400' : '';
+  const kindLabel =
+    node.kind === 'user' ? '👤 User' :
+    node.kind === 'assistant' ? '✦ Assistant' :
+    node.kind === 'tool' ? `⚙ ${node.toolName}` :
+    node.kind === 'memory' ? `💧 Memory` :
+    node.kind === 'skill' ? `◈ Skill` : node.kind;
+  const statusIcon =
+    node.status === 'done' ? '✓' :
+    node.status === 'error' ? '✗' :
+    node.status === 'running' ? '⟳' :
+    node.status === 'archived' ? '⊘' : '';
+  const statusColor =
+    node.status === 'done' ? 'text-green-400' :
+    node.status === 'error' ? 'text-red-400' :
+    node.status === 'running' ? 'text-yellow-400' :
+    node.status === 'archived' ? 'text-white/40' : '';
 
   // Shared props for resize handles
   const handleProps = (edge: string, cursor: string, pos: React.CSSProperties) => ({
@@ -376,7 +397,7 @@ function NodeCard({
         <button onClick={onClose} className="text-white/40 hover:text-white/80 text-lg leading-none">×</button>
       </div>
 
-      {/* Content — tool nodes show raw params+result, others render markdown */}
+      {/* Content — kind-specific rendering */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {node.kind === 'tool' ? (
           <>
@@ -393,6 +414,10 @@ function NodeCard({
               </pre>
             </div>
           </>
+        ) : node.kind === 'memory' ? (
+          <MemoryCardBody node={node} />
+        ) : node.kind === 'skill' ? (
+          <SkillCardBody node={node} />
         ) : (
           <MarkdownContent content={node.content || '...'} />
         )}
@@ -419,5 +444,71 @@ function MarkdownContent({ content }: { content: string }) {
       className="cosmos-md px-3 py-2 text-xs text-white/70"
       dangerouslySetInnerHTML={{ __html: html }}
     />
+  );
+}
+
+function MemoryCardBody({ node }: { node: CosmosNode }) {
+  const cat = node.memoryCategory ?? 'fact';
+  const catHue = MEMORY_CAT_HUE[cat] ?? 170;
+  const archived = node.status === 'archived';
+  return (
+    <div className={`px-3 py-2 space-y-2 ${archived ? 'opacity-50' : ''}`}>
+      <div className="flex items-center gap-2">
+        <span
+          className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full"
+          style={{ backgroundColor: `hsla(${catHue}, 60%, 40%, 0.3)`, color: `hsl(${catHue}, 80%, 75%)` }}
+        >
+          {cat}
+        </span>
+        <span className="text-[10px] text-white/40">
+          {new Date(node.timestamp).toLocaleString()}
+        </span>
+        {archived && <span className="text-[10px] text-white/40 ml-auto">archived</span>}
+      </div>
+      <MarkdownContent content={node.content || '...'} />
+    </div>
+  );
+}
+
+function SkillCardBody({ node }: { node: CosmosNode }) {
+  const [expanded, setExpanded] = useState(false);
+  const triggers = node.skillTriggers ?? [];
+  const tools = node.skillTools ?? [];
+  return (
+    <div className="px-3 py-2 space-y-2">
+      <div className="flex items-center gap-2">
+        <code className="text-xs font-mono text-amber-300/90">{node.skillName ?? '—'}</code>
+      </div>
+      {node.skillDescription && (
+        <p className="text-xs text-white/75 leading-relaxed">{node.skillDescription}</p>
+      )}
+      {triggers.length > 0 && (
+        <div className="flex flex-wrap gap-1 items-center">
+          <span className="text-[10px] uppercase tracking-wider text-white/40 mr-1">Triggers</span>
+          {triggers.map(t => (
+            <code key={t} className="px-1.5 py-0.5 rounded bg-white/10 text-[10px] text-white/80">{t}</code>
+          ))}
+        </div>
+      )}
+      {tools.length > 0 && (
+        <div className="flex flex-wrap gap-1 items-center">
+          <span className="text-[10px] uppercase tracking-wider text-white/40 mr-1">Tools</span>
+          {tools.map(t => (
+            <code key={t} className="px-1.5 py-0.5 rounded bg-white/10 text-[10px] text-white/80">{t}</code>
+          ))}
+        </div>
+      )}
+      {node.skillInstructions && (
+        <div>
+          <button
+            onClick={() => setExpanded(e => !e)}
+            className="text-[10px] uppercase tracking-wider text-white/50 hover:text-white/80"
+          >
+            {expanded ? '▾ Instructions' : '▸ Instructions'}
+          </button>
+          {expanded && <MarkdownContent content={node.skillInstructions} />}
+        </div>
+      )}
+    </div>
   );
 }

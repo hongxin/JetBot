@@ -1,10 +1,28 @@
 import { create } from 'zustand';
-import type { CosmosNode, CosmosEdge, Viewport } from '../components/cosmos/types';
+import type { CosmosNode, CosmosEdge, Viewport, MemoryCategory } from '../components/cosmos/types';
 import { useAgentStore } from './agentStore';
 
 export type ActiveView = 'chat' | 'cosmos';
 
 type AddNodeInput = Omit<CosmosNode, 'x' | 'y' | 'radius' | 'birthTime'>;
+
+export interface AddMemoryNodeInput {
+  id: string;
+  memoryId: number;
+  category: MemoryCategory;
+  content: string;
+  anchorNodeId?: string | null;
+}
+
+export interface AddSkillNodeInput {
+  id: string;
+  name: string;
+  description: string;
+  triggers: string[];
+  tools: string[];
+  instructions: string;
+  anchorNodeId?: string | null;
+}
 
 interface CosmosState {
   nodes: CosmosNode[];
@@ -22,6 +40,9 @@ interface CosmosState {
   setBreakNext: (v: boolean) => void;
   nextTurn: () => number;
   addNode: (node: AddNodeInput) => void;
+  addMemoryNode: (input: AddMemoryNodeInput) => void;
+  addSkillNode: (input: AddSkillNodeInput) => void;
+  archiveMemoryNode: (memoryId: number) => void;
   updateNode: (id: string, update: Partial<CosmosNode>) => void;
   selectNode: (id: string | null) => void;
   setDragConnectFrom: (id: string | null) => void;
@@ -29,7 +50,10 @@ interface CosmosState {
   setViewport: (v: Partial<Viewport>) => void;
 }
 
-const RADIUS_MAP = { user: 32, assistant: 36, tool: 28 };
+const RADIUS_MAP: Record<string, number> = {
+  user: 32, assistant: 36, tool: 28,
+  memory: 22, skill: 30,
+};
 
 export const useCosmosStore = create<CosmosState>((set, get) => ({
   nodes: [],
@@ -108,6 +132,84 @@ export const useCosmosStore = create<CosmosState>((set, get) => ({
     set({ nodes: [...nodes, node], edges: newEdges, _crossTurnFromId: null });
   },
 
+  addMemoryNode: ({ id, memoryId, category, content, anchorNodeId }) => {
+    const { nodes, edges, currentTurnId } = get();
+    const anchor = anchorNodeId ? nodes.find(n => n.id === anchorNodeId) : null;
+    // Spawn near anchor if present, else random initial position
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 80 + Math.random() * 60;
+    const cx = anchor ? anchor.x : 0;
+    const cy = anchor ? anchor.y : 0;
+
+    const node: CosmosNode = {
+      id,
+      kind: 'memory',
+      content,
+      toolName: '',
+      params: {},
+      isError: false,
+      status: 'done',
+      x: cx + Math.cos(angle) * dist,
+      y: cy + Math.sin(angle) * dist,
+      radius: RADIUS_MAP.memory,
+      turnId: currentTurnId,
+      timestamp: Date.now(),
+      birthTime: performance.now(),
+      memoryId,
+      memoryCategory: category,
+    };
+
+    const newEdges = anchor
+      ? [...edges, { id: `edge-derives-${anchor.id}-${id}`, fromId: anchor.id, toId: id, type: 'derives' as const }]
+      : edges;
+
+    set({ nodes: [...nodes, node], edges: newEdges });
+  },
+
+  addSkillNode: ({ id, name, description, triggers, tools, instructions, anchorNodeId }) => {
+    const { nodes, edges, currentTurnId } = get();
+    const anchor = anchorNodeId ? nodes.find(n => n.id === anchorNodeId) : null;
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 110 + Math.random() * 60;
+    const cx = anchor ? anchor.x : 0;
+    const cy = anchor ? anchor.y : 0;
+
+    const node: CosmosNode = {
+      id,
+      kind: 'skill',
+      content: description,
+      toolName: '',
+      params: {},
+      isError: false,
+      status: 'done',
+      x: cx + Math.cos(angle) * dist,
+      y: cy + Math.sin(angle) * dist,
+      radius: RADIUS_MAP.skill,
+      turnId: currentTurnId,
+      timestamp: Date.now(),
+      birthTime: performance.now(),
+      skillName: name,
+      skillDescription: description,
+      skillTriggers: triggers,
+      skillTools: tools,
+      skillInstructions: instructions,
+    };
+
+    const newEdges = anchor
+      ? [...edges, { id: `edge-derives-${anchor.id}-${id}`, fromId: anchor.id, toId: id, type: 'derives' as const }]
+      : edges;
+
+    set({ nodes: [...nodes, node], edges: newEdges });
+  },
+
+  archiveMemoryNode: (memoryId) => {
+    set((s) => ({
+      nodes: s.nodes.map((n) =>
+        n.kind === 'memory' && n.memoryId === memoryId ? { ...n, status: 'archived' } : n,
+      ),
+    }));
+  },
+
   updateNode: (id, update) =>
     set((s) => ({
       nodes: s.nodes.map((n) => (n.id === id ? { ...n, ...update } : n)),
@@ -156,6 +258,11 @@ function truncate(s: string, max: number): string {
 function describeNode(n: CosmosNode): string {
   if (n.kind === 'user') return `[用户]: ${truncate(n.content, 200)}`;
   if (n.kind === 'assistant') return `[AI]: ${truncate(n.content, 200)}`;
+  if (n.kind === 'memory') return `[记忆/${n.memoryCategory ?? 'fact'}]: ${truncate(n.content, 200)}`;
+  if (n.kind === 'skill') {
+    const triggers = (n.skillTriggers ?? []).join(', ');
+    return `[技能 ${n.skillName ?? '?'}]: ${truncate(n.skillDescription ?? n.content, 160)}${triggers ? ` (触发: ${triggers})` : ''}`;
+  }
   return `[${n.toolName}]: ${truncate(JSON.stringify(n.params), 120)} → ${truncate(n.content, 200)}`;
 }
 

@@ -48,6 +48,11 @@ export class MemoryStore {
     };
     this.entries.push(entry);
     try { await put(STORE_NAME, entry); } catch {}
+    // Notify subscribers (CosmosStore via agentStore) that a memory was added.
+    // Decoupled via DOM CustomEvent to avoid circular store↔agent imports.
+    if (typeof document !== 'undefined') {
+      document.dispatchEvent(new CustomEvent('jetbot:memory:added', { detail: { entry } }));
+    }
     return entry;
   }
 
@@ -57,6 +62,9 @@ export class MemoryStore {
     if (idx === -1) return false;
     this.entries.splice(idx, 1);
     try { await dbDel(STORE_NAME, String(id)); } catch {}
+    if (typeof document !== 'undefined') {
+      document.dispatchEvent(new CustomEvent('jetbot:memory:removed', { detail: { id } }));
+    }
     return true;
   }
 

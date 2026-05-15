@@ -409,6 +409,11 @@ export class CosmosCanvas {
         ctx.strokeStyle = 'hsla(200, 40%, 45%, 0.15)';
         ctx.lineWidth = 1.0;
         ctx.setLineDash([4, 6]);
+      } else if (edge.type === 'derives') {
+        // Causal sediment edge — assistant → memory/skill
+        ctx.strokeStyle = 'hsla(170, 65%, 55%, 0.45)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([6, 4]);
       } else {
         ctx.strokeStyle = 'hsla(45, 80%, 60%, 0.5)';
         ctx.lineWidth = 2;
@@ -424,7 +429,7 @@ export class CosmosCanvas {
       for (const p of edgeParticles) {
         p.t = (p.t + particleSpeed) % 1;
         const pt = this.bezierPt(x1, y1, cx, cy, x2, y2, p.t);
-        const hue = edge.type === 'manual' ? 45 : 200;
+        const hue = edge.type === 'manual' ? 45 : edge.type === 'derives' ? 170 : 200;
         ctx.beginPath();
         ctx.arc(pt.x, pt.y, 2, 0, Math.PI * 2);
         ctx.fillStyle = `hsla(${hue}, 80%, 70%, ${particleAlpha})`;
@@ -518,42 +523,73 @@ export class CosmosCanvas {
 
       const fillHue = (node.status === 'error' || node.isError) ? 0 : hue;
 
-      // --- Inner circle ---
-      ctx.beginPath();
-      ctx.arc(drawX, sy, r, 0, Math.PI * 2);
-      const alpha = node.kind === 'tool' ? 0.8 : 0.7;
-      const lightness = node.kind === 'user' ? 55 : node.kind === 'assistant' ? 45 : 50;
-      ctx.fillStyle = `hsla(${fillHue}, 65%, ${lightness}%, ${alpha})`;
-      ctx.fill();
+      // Archived memory: render desaturated/dim
+      const archived = node.status === 'archived';
+      const archiveDim = archived ? 0.35 : 1;
 
-      // --- Border ring ---
-      ctx.beginPath();
-      ctx.arc(drawX, sy, r, 0, Math.PI * 2);
-      ctx.strokeStyle = `hsla(${fillHue}, 90%, 70%, ${isHovered ? 1 : 0.7})`;
-      ctx.lineWidth = isHovered ? 2 : 1;
-      ctx.stroke();
+      // --- Inner shape: circle for most, hexagon for skill, droplet outline for memory ---
+      const baseAlpha = (node.kind === 'tool' ? 0.8 : 0.7) * archiveDim;
+      const lightness =
+        node.kind === 'user' ? 55 :
+        node.kind === 'assistant' ? 45 :
+        node.kind === 'skill' ? 52 :
+        node.kind === 'memory' ? 48 :
+        50;
 
-      // --- Kind icon inside (small, centered) ---
-      if (r > 8) {
+      if (node.kind === 'skill') {
+        // Hexagon — crystallized capability
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (Math.PI / 3) * i - Math.PI / 2;
+          const px = drawX + r * Math.cos(a);
+          const py = sy + r * Math.sin(a);
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fillStyle = `hsla(${fillHue}, 70%, ${lightness}%, ${baseAlpha})`;
+        ctx.fill();
+        ctx.strokeStyle = `hsla(${fillHue}, 95%, 75%, ${(isHovered ? 1 : 0.85) * archiveDim})`;
+        ctx.lineWidth = isHovered ? 2 : 1.4;
+        ctx.stroke();
+      } else {
+        // Circle (user/assistant/tool/memory)
+        ctx.beginPath();
+        ctx.arc(drawX, sy, r, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${fillHue}, 65%, ${lightness}%, ${baseAlpha})`;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(drawX, sy, r, 0, Math.PI * 2);
+        ctx.strokeStyle = `hsla(${fillHue}, 90%, 70%, ${(isHovered ? 1 : 0.7) * archiveDim})`;
+        ctx.lineWidth = isHovered ? 2 : 1;
+        ctx.stroke();
+
+        // Memory: inner droplet/teardrop accent — sediment of a fact
+        if (node.kind === 'memory') {
+          ctx.beginPath();
+          ctx.moveTo(drawX, sy - r * 0.55);
+          ctx.quadraticCurveTo(drawX + r * 0.5, sy, drawX, sy + r * 0.55);
+          ctx.quadraticCurveTo(drawX - r * 0.5, sy, drawX, sy - r * 0.55);
+          ctx.closePath();
+          ctx.fillStyle = `hsla(${fillHue}, 90%, 80%, ${0.45 * archiveDim})`;
+          ctx.fill();
+        }
+      }
+
+      // --- Kind icon inside (small, centered) — skip for memory (droplet IS the icon) ---
+      if (r > 8 && node.kind !== 'memory') {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         const iconSize = Math.max(10, r * 0.5);
 
-        if (node.kind === 'user') {
-          // User icon: small person silhouette → just use emoji-like char
-          ctx.font = `${iconSize}px sans-serif`;
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-          ctx.fillText('👤', drawX, sy - 1);
-        } else if (node.kind === 'assistant') {
-          ctx.font = `${iconSize}px sans-serif`;
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-          ctx.fillText('✦', drawX, sy - 1);
-        } else {
-          // Tool: show a small gear-like dot
-          ctx.font = `${iconSize * 0.8}px sans-serif`;
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-          ctx.fillText('⚙', drawX, sy - 1);
-        }
+        let icon = '';
+        if (node.kind === 'user') icon = '👤';
+        else if (node.kind === 'assistant') icon = '✦';
+        else if (node.kind === 'skill') icon = '◈';
+        else icon = '⚙';
+
+        ctx.font = `${node.kind === 'tool' ? iconSize * 0.8 : iconSize}px sans-serif`;
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.85 * archiveDim})`;
+        ctx.fillText(icon, drawX, sy - 1);
       }
 
       // --- Label below ---
@@ -561,11 +597,16 @@ export class CosmosCanvas {
         ctx.font = `${Math.max(9, 11 * zoom)}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.65 * archiveDim})`;
 
         let label: string;
         if (node.kind === 'tool') {
           label = node.toolName;
+        } else if (node.kind === 'skill') {
+          label = node.skillName ?? node.content.slice(0, 18);
+        } else if (node.kind === 'memory') {
+          label = `[${node.memoryCategory ?? 'fact'}] ${node.content.slice(0, 14)}`;
+          if (node.content.length > 14) label += '…';
         } else {
           // Show first ~18 chars of content
           label = node.content.slice(0, 18).replace(/\n/g, ' ');

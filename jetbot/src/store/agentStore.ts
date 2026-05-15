@@ -17,6 +17,12 @@ let currentSource: MessageSource = undefined;
 let currentCosmosTurnId = 0;
 // Track assistant node id so we can update its content when finalized
 let currentAssistantCosmosId = '';
+// Last finalized assistant node — anchor for memory/skill derivation edges
+let lastAssistantCosmosId: string | null = null;
+// msgId → cosmos assistant node id; used by distill events to anchor skill nodes
+const msgIdToCosmosId = new Map<string, string>();
+// Bound listeners — held so destroyAgent can detach
+let derivedNodeListeners: { name: string; fn: EventListener }[] = [];
 
 interface AgentState {
   agent: Agent | null;
@@ -73,6 +79,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             store.setIteration(event.data.iteration as number);
             // Create assistant cosmos node (content will be updated when finalized)
             currentAssistantCosmosId = `assistant-${currentMsgId}`;
+            msgIdToCosmosId.set(currentMsgId, currentAssistantCosmosId);
             cosmos.addNode({
               id: currentAssistantCosmosId,
               kind: 'assistant',
@@ -105,6 +112,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
                 status: 'done',
               });
             }
+            // Remember this as anchor for any memory/skill that derives from it later
+            lastAssistantCosmosId = currentAssistantCosmosId;
             const toolCalls = event.data.toolCalls as Array<{ id: string; name: string; arguments: string }>;
             if (toolCalls?.length) {
               for (const tc of toolCalls) {
@@ -174,11 +183,60 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     set({ agent, scheduler });
     // Initial task count
     scheduler.listTasks().then(tasks => set({ taskCount: tasks.length }));
+
+    // --- Derived-node bridge: memory/skill events → Cosmos nodes ---
+    // Detach any prior listeners (idempotent re-init)
+    for (const { name, fn } of derivedNodeListeners) document.removeEventListener(name, fn);
+    derivedNodeListeners = [];
+
+    const onMemoryAdded: EventListener = (e) => {
+      const { entry } = (e as CustomEvent).detail as { entry: { id: number; category: 'preference' | 'project' | 'decision' | 'fact'; content: string } };
+      useCosmosStore.getState().addMemoryNode({
+        id: `memory-${entry.id}`,
+        memoryId: entry.id,
+        category: entry.category,
+        content: entry.content,
+        anchorNodeId: lastAssistantCosmosId,
+      });
+    };
+    const onMemoryRemoved: EventListener = (e) => {
+      const { id } = (e as CustomEvent).detail as { id: number };
+      useCosmosStore.getState().archiveMemoryNode(id);
+    };
+    const onSkillDistilled: EventListener = (e) => {
+      const { proposal, anchorMsgId } = (e as CustomEvent).detail as {
+        proposal: { name: string; description: string; triggers: string[]; tools: string[]; instructions: string };
+        anchorMsgId: string;
+      };
+      const anchor = msgIdToCosmosId.get(anchorMsgId) ?? lastAssistantCosmosId;
+      useCosmosStore.getState().addSkillNode({
+        id: `skill-${proposal.name}-${Date.now()}`,
+        name: proposal.name,
+        description: proposal.description,
+        triggers: proposal.triggers,
+        tools: proposal.tools,
+        instructions: proposal.instructions,
+        anchorNodeId: anchor,
+      });
+    };
+
+    document.addEventListener('jetbot:memory:added', onMemoryAdded);
+    document.addEventListener('jetbot:memory:removed', onMemoryRemoved);
+    document.addEventListener('jetbot:skill:distilled-accepted', onSkillDistilled);
+    derivedNodeListeners = [
+      { name: 'jetbot:memory:added', fn: onMemoryAdded },
+      { name: 'jetbot:memory:removed', fn: onMemoryRemoved },
+      { name: 'jetbot:skill:distilled-accepted', fn: onSkillDistilled },
+    ];
   },
 
   destroyAgent: () => {
     const { agent } = get();
     agent?.destroy();
+    for (const { name, fn } of derivedNodeListeners) document.removeEventListener(name, fn);
+    derivedNodeListeners = [];
+    msgIdToCosmosId.clear();
+    lastAssistantCosmosId = null;
     set({ agent: null, scheduler: null, autoMode: false, taskCount: 0 });
   },
 

@@ -1,24 +1,40 @@
+export type CosmosNodeKind = 'user' | 'assistant' | 'tool' | 'memory' | 'skill';
+
+export type MemoryCategory = 'preference' | 'project' | 'decision' | 'fact';
+
 export interface CosmosNode {
   id: string;
-  kind: 'user' | 'assistant' | 'tool';
-  content: string;                         // user/assistant text; tool result
+  kind: CosmosNodeKind;
+  content: string;                         // user/assistant text; tool result; memory content; skill description
   toolName: string;                        // only meaningful for tool nodes
   params: Record<string, unknown>;         // only meaningful for tool nodes
   isError: boolean;
-  status: 'idle' | 'running' | 'done' | 'error';
+  // 'archived' indicates a memory was removed from MemoryStore but kept as historical trace
+  status: 'idle' | 'running' | 'done' | 'error' | 'archived';
   x: number;
   y: number;
   radius: number;
   turnId: number;                          // groups user→assistant→tools
   timestamp: number;
   birthTime: number;
+
+  // memory-only
+  memoryId?: number;
+  memoryCategory?: MemoryCategory;
+
+  // skill-only
+  skillName?: string;
+  skillDescription?: string;
+  skillTriggers?: string[];
+  skillTools?: string[];
+  skillInstructions?: string;
 }
 
 export interface CosmosEdge {
   id: string;
   fromId: string;
   toId: string;
-  type: 'auto' | 'cross-turn' | 'manual';
+  type: 'auto' | 'cross-turn' | 'manual' | 'derives';
   manualPrompt?: string;
 }
 
@@ -46,6 +62,8 @@ export const TOOL_HUE: Record<string, number> = {
 export const KIND_HUE: Record<string, number> = {
   user: 30,       // warm orange
   assistant: 260, // purple
+  memory: 170,    // teal — sediment of facts
+  skill: 42,      // amber — crystallized capability
 };
 
 export const DEFAULT_HUE = 210;
